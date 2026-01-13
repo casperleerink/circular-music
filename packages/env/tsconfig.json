@@ -1,0 +1,3 @@
+{
+  "extends": "@circular-music/config/tsconfig.base.json"
+}
