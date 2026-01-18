@@ -52,24 +52,49 @@ function AudioPlayground({
   const renderVoice = (gate: number) => {
     const key = voiceKey.current;
 
-    // Noise source - key stays the same so graph is stable
+    const gateSignal = el.const({ key: `${key}:gate`, value: gate });
+
+    // Filter frequency envelope: starts high, drops for that "blip" movement
+    const filterSeq = el.sparseq(
+      {
+        key: `${key}:filter-seq`,
+        seq: [
+          { value: 1, tickTime: 0 },
+          { value: 0.3, tickTime: 60 },
+        ],
+      },
+      el.train(1000),
+      gateSignal
+    );
+    const smoothedFilter = el.smooth(el.tau2pole(0.02), el.mul(gateSignal, filterSeq));
+
+    // Bandpass center frequency with envelope
+    const filterFreq = el.add(600, el.mul(smoothedFilter, 1200));
+
+    // Noise source
     const noise = el.noise({ key: `${key}:noise` });
 
-    // Bandpass filter for interesting tonal character
-    const filtered = el.bandpass(1200, 2.5, noise);
+    // Resonant bandpass filter with moving frequency - gives character without being tonal
+    const bandpassed = el.bandpass(filterFreq, 4, noise);
 
-    // Create envelope using sparseq pattern
+    // Additional filtering to soften the sound
+    const filtered = el.lowpass(2500, 0.7, bandpassed);
+
+    // Main envelope - punchy but not too short
     const env = createEnvelope({
       key,
       gate,
-      attack: 0.005, // 5ms attack
-      sustain: 0.6, // Sustain at 60%
-      release: 0.4, // 400ms release for nice tail
-      sustainTickTime: 50,
+      attack: 0.002,
+      sustain: 0.15,
+      release: 0.2,
+      sustainTickTime: 30,
     });
 
+    // Master gain to control overall volume
+    const masterGain = 0.25;
+
     // Apply envelope to filtered noise
-    const dryHit = applyEnvelope(env, filtered, 0.5);
+    const dryHit = el.mul(masterGain, applyEnvelope(env, filtered, 0.5));
 
     // Reverb using multiple delay taps with feedback
     const d1 = el.delay({ size: 44100 }, el.ms2samps(23), 0.6, dryHit);
