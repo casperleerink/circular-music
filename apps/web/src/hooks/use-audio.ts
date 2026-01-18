@@ -1,0 +1,65 @@
+import { el } from "@elemaudio/core";
+import type { NodeRepr_t } from "@elemaudio/core";
+import WebRenderer from "@elemaudio/web-renderer";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export function useAudio() {
+  const [isReady, setIsReady] = useState(false);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const coreRef = useRef<WebRenderer | null>(null);
+  const nodeRef = useRef<AudioWorkletNode | null>(null);
+
+  const initialize = useCallback(async () => {
+    if (ctxRef.current) return;
+
+    const ctx = new AudioContext();
+    const core = new WebRenderer();
+
+    core.on("load", () => {
+      setIsReady(true);
+    });
+
+    const node = await core.initialize(ctx, {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+    });
+
+    node.connect(ctx.destination);
+
+    ctxRef.current = ctx;
+    coreRef.current = core;
+    nodeRef.current = node;
+  }, []);
+
+  const render = useCallback((left: NodeRepr_t, right: NodeRepr_t) => {
+    if (!coreRef.current) return;
+    coreRef.current.render(left, right);
+  }, []);
+
+  const silence = useCallback(() => {
+    if (!coreRef.current) return;
+    coreRef.current.render(el.const({ value: 0 }), el.const({ value: 0 }));
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (nodeRef.current) {
+        nodeRef.current.disconnect();
+      }
+      if (ctxRef.current) {
+        ctxRef.current.close();
+      }
+    };
+  }, []);
+
+  return {
+    isReady,
+    initialize,
+    render,
+    silence,
+    ctx: ctxRef.current,
+    core: coreRef.current,
+  };
+}
