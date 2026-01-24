@@ -1,9 +1,11 @@
 import { el } from "@elemaudio/core";
+import type { NodeRepr_t } from "@elemaudio/core";
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAudio } from "@/hooks/use-audio";
+import { createDiffuseWorld } from "@/lib/audio/diffuse-world";
 import { createEnvelope, applyEnvelope } from "@/lib/audio/envelope";
 
 export const Route = createFileRoute("/")({
@@ -47,9 +49,16 @@ function AudioPlayground({
 }) {
   const voiceKey = useRef("voice-0");
   const isGateOpen = useRef(false);
+  const [diffuseActive, setDiffuseActive] = useState(false);
+  const diffuseActiveRef = useRef(false);
 
-  // Renders the synth voice with current gate state
-  const renderVoice = (gate: number) => {
+  // Keep ref in sync with state for use in callbacks
+  useEffect(() => {
+    diffuseActiveRef.current = diffuseActive;
+  }, [diffuseActive]);
+
+  // Creates the trigger voice signal (returns the signal, doesn't render)
+  const createTriggerVoice = useCallback((gate: number): NodeRepr_t => {
     const key = voiceKey.current;
 
     const gateSignal = el.const({ key: `${key}:gate`, value: gate });
@@ -66,7 +75,10 @@ function AudioPlayground({
       el.train(1000),
       gateSignal
     );
-    const smoothedFilter = el.smooth(el.tau2pole(0.02), el.mul(gateSignal, filterSeq));
+    const smoothedFilter = el.smooth(
+      el.tau2pole(0.02),
+      el.mul(gateSignal, filterSeq)
+    );
 
     // Bandpass center frequency with envelope
     const filterFreq = el.add(600, el.mul(smoothedFilter, 1200));
@@ -107,18 +119,37 @@ function AudioPlayground({
     const warmReverb = el.lowpass(3000, 0.7, reverbMix);
 
     // Combine dry + wet
-    const output = el.add(dryHit, el.mul(warmReverb, 0.4));
+    return el.add(dryHit, el.mul(warmReverb, 0.4));
+  }, []);
 
-    audio.render(output, output);
-  };
+  // Combined render function that mixes trigger voice with diffuse world
+  const renderAudio = useCallback(
+    (gate: number) => {
+      const triggerVoice = createTriggerVoice(gate);
+      const diffuse = createDiffuseWorld(
+        "diffuse",
+        diffuseActiveRef.current
+      );
+
+      // Mix both voices
+      const output = el.add(triggerVoice, diffuse);
+      audio.render(output, output);
+    },
+    [audio, createTriggerVoice]
+  );
+
+  // Reference to track current gate state for diffuse-only renders
+  const currentGateRef = useRef(0);
 
   const handlePointerDown = () => {
     if (!audio.isReady || isGateOpen.current) return;
 
     // Ensure rising edge by setting gate to 0 first, then 1
-    renderVoice(0);
+    currentGateRef.current = 0;
+    renderAudio(0);
     requestAnimationFrame(() => {
-      renderVoice(1);
+      currentGateRef.current = 1;
+      renderAudio(1);
       isGateOpen.current = true;
     });
   };
@@ -126,8 +157,21 @@ function AudioPlayground({
   const handlePointerUp = () => {
     if (!isGateOpen.current) return;
 
-    renderVoice(0);
+    currentGateRef.current = 0;
+    renderAudio(0);
     isGateOpen.current = false;
+  };
+
+  // Toggle diffuse world on/off
+  const handleDiffuseToggle = () => {
+    const newState = !diffuseActive;
+    setDiffuseActive(newState);
+    diffuseActiveRef.current = newState;
+
+    // Re-render to apply the change
+    if (audio.isReady) {
+      renderAudio(currentGateRef.current);
+    }
   };
 
   return (
@@ -149,7 +193,22 @@ function AudioPlayground({
         >
           Hold to Play
         </Button>
+
+        <Button
+          size="lg"
+          variant={diffuseActive ? "default" : "outline"}
+          onClick={handleDiffuseToggle}
+          disabled={!audio.isReady}
+        >
+          {diffuseActive ? "Diffuse: On" : "Diffuse: Off"}
+        </Button>
       </div>
+
+      {diffuseActive && (
+        <p className="text-sm text-muted-foreground max-w-md text-center">
+          Diffuse — sparse noise bursts, unpredictable filters, vapor and static
+        </p>
+      )}
     </div>
   );
 }

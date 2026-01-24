@@ -1,54 +1,46 @@
 # Circular Music: Design Philosophy
 
-## What human capacities does the modern web suppress — and how can my system require them?
+## Core Metaphor: The Shoreline
 
-The modern web suppresses:
-
-- patience
-- listening
-- timing
-- ambiguity tolerance
-- shared silence
-- responsibility without identity
-
-This piece should require these to function well.
+The website is a shoreline—a place shaped by forces larger than any single visit. Visitors don't come to sculpt. They arrive, interact, leave. But each interaction is a grain that either stays or goes. Over hundreds, thousands of visits, the shape changes.
 
 ---
 
-## Theme 1: Attention as a Shared Practice (Not a Resource)
+## The Indifference of the Agent
 
-### Real-world grounding
+The tide doesn't intend to sculpt. It just arrives and withdraws. The artistry is accidental, emerging from repetition meeting resistance.
 
-- Algorithms optimize for capture.
-- Human connection requires sustained attention.
+- No visitor causes transformation—they're _caught up in it_
+- The tide is time itself: the daily swell of waking hours, the weekly pulse, the seasonal drift
+- Visitors leave traces they'll never see
 
-### Structural rule
+Transformation happens _through_ you, not _by_ you.
 
-- The system improves when users stay, not when they act quickly
-- Rapid interaction degrades quality
-- Waiting is meaningful
+---
 
-### Musical implementation
+## Asymmetry in Symmetry
 
-- Sounds bloom only after sustained presence
-- Quick actions produce thin, unstable output
-- Silence increases future clarity
+Each cycle deposits and removes, but never in equal measure. Some grains stay, some leave. Over thousands of identical motions, bias accumulates into form.
 
-### Visual implementation
+- The circle wobbles imperceptibly
+- That wobble _is_ the story
+- Visitors are the asymmetries—the small biases that accumulate into transformation
 
-- Nothing reacts instantly
-- Gradual sharpening
-- Over-stimulation blurs form
+---
 
-### Why this actually helps
+## Memory Without a Mind
 
-You are training:
+The shoreline is a recording medium. Every storm, every calm season, every shift in current—it's all written in the geometry. But there's no retrieval, no playback.
 
-- patience
-- non-performative presence
-- shared temporal awareness
+- The website doesn't store a history
+- It doesn't show a changelog
+- It doesn't narrate its own evolution
+- Its current state _is_ the memory
+- The form is the only record
 
-No messaging. Just consequence.
+Visitors can't compare to what was before. They only see the shoreline as it is now—shaped by everyone who came before them, shaping it imperceptibly for everyone who comes after.
+
+**The inversion:** Every visitor thinks they're observing the site, but actually the site is being _written by_ their observation. Not in a data-harvesting way—in a geological way.
 
 ---
 
