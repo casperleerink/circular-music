@@ -1,3 +1,4 @@
+import { el } from "@elemaudio/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -5,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAudio } from "@/hooks/use-audio";
 import { createGranular, type GranularParams } from "@/lib/audio/granular";
+import {
+  createResonator,
+  type ResonatorParams,
+} from "@/lib/audio/resonator";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -81,6 +86,7 @@ function WelcomeScreen({ onStart }: { onStart: () => void }) {
 function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const audio = useAudio();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isResonatorPlaying, setIsResonatorPlaying] = useState(false);
 
   // Granular parameter state
   const [grainSize, setGrainSize] = useState(25);
@@ -91,6 +97,18 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [pitchSpray, setPitchSpray] = useState(0.05);
   const [stereoSpread, setStereoSpread] = useState(0.5);
   const [gain, setGain] = useState(0.5);
+
+  // Resonator parameter state
+  const [band1Freq, setBand1Freq] = useState(220);
+  const [band1Q, setBand1Q] = useState(80);
+  const [band1Gain, setBand1Gain] = useState(0.8);
+  const [band2Freq, setBand2Freq] = useState(440);
+  const [band2Q, setBand2Q] = useState(80);
+  const [band2Gain, setBand2Gain] = useState(0.6);
+  const [band3Freq, setBand3Freq] = useState(880);
+  const [band3Q, setBand3Q] = useState(80);
+  const [band3Gain, setBand3Gain] = useState(0.4);
+  const [resonatorMix, setResonatorMix] = useState(0.7);
 
   const getGranularParams = (): GranularParams => ({
     samplePath: "/samples/acadia",
@@ -105,6 +123,15 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     envelope: "hann",
   });
 
+  const getResonatorParams = (): ResonatorParams => ({
+    bands: [
+      { freq: band1Freq, q: band1Q, gain: band1Gain },
+      { freq: band2Freq, q: band2Q, gain: band2Gain },
+      { freq: band3Freq, q: band3Q, gain: band3Gain },
+    ],
+    mix: resonatorMix,
+  });
+
   const renderGranular = (params: GranularParams) => {
     if (!sampleData.acadia) return;
     const granular = createGranular(
@@ -115,6 +142,28 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     audio.render(granular.left, granular.right);
   };
 
+  const renderResonator = (params: ResonatorParams) => {
+    if (!sampleData.acadia) return;
+    // Play sample in a loop using el.table with a phasor
+    // Rate = sampleRate / sampleLength gives us 1 full cycle per sample duration
+    const loopRate = 44100 / sampleData.acadia.length;
+    const phasor = el.phasor(loopRate);
+    const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
+
+    // Process through resonator
+    const resonated = createResonator("resonator", params, {
+      left: sampleSignal,
+      right: sampleSignal,
+    });
+
+    // Apply output gain
+    const outputGain = el.smooth(el.tau2pole(0.02), el.const({ key: "resonator:outputGain", value: 0.5 }));
+    audio.render(
+      el.mul(resonated.left, outputGain),
+      el.mul(resonated.right, outputGain),
+    );
+  };
+
   const handleToggle = () => {
     if (!audio.isReady || !samplesLoaded) return;
     if (!sampleData.acadia) return;
@@ -123,6 +172,10 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
       audio.silence();
       setIsPlaying(false);
     } else {
+      // Stop resonator if playing
+      if (isResonatorPlaying) {
+        setIsResonatorPlaying(false);
+      }
       const params = getGranularParams();
       console.log("Granular params:", params);
       renderGranular(params);
@@ -130,10 +183,35 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     }
   };
 
+  const handleResonatorToggle = () => {
+    if (!audio.isReady || !samplesLoaded) return;
+    if (!sampleData.acadia) return;
+
+    if (isResonatorPlaying) {
+      audio.silence();
+      setIsResonatorPlaying(false);
+    } else {
+      // Stop granular if playing
+      if (isPlaying) {
+        setIsPlaying(false);
+      }
+      const params = getResonatorParams();
+      console.log("Resonator params:", params);
+      renderResonator(params);
+      setIsResonatorPlaying(true);
+    }
+  };
+
   const handleSliderCommit = () => {
     if (!isPlaying || !audio.isReady) return;
     const params = getGranularParams();
     renderGranular(params);
+  };
+
+  const handleResonatorSliderCommit = () => {
+    if (!isResonatorPlaying || !audio.isReady) return;
+    const params = getResonatorParams();
+    renderResonator(params);
   };
 
   return (
@@ -145,91 +223,215 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
         </p>
       </div>
 
-      <div className="grid w-full max-w-md gap-6">
-        <SliderControl
-          label="Grain Size"
-          value={grainSize}
-          onChange={setGrainSize}
-          onCommit={handleSliderCommit}
-          min={5}
-          max={200}
-          step={1}
-          unit="ms"
-        />
-        <SliderControl
-          label="Density"
-          value={density}
-          onChange={setDensity}
-          onCommit={handleSliderCommit}
-          min={1}
-          max={50}
-          step={1}
-          unit="grains/s"
-        />
-        <SliderControl
-          label="Position"
-          value={position}
-          onChange={setPosition}
-          onCommit={handleSliderCommit}
-          min={0}
-          max={1}
-          step={0.01}
-        />
-        <SliderControl
-          label="Pitch"
-          value={pitch}
-          onChange={setPitch}
-          onCommit={handleSliderCommit}
-          min={0.25}
-          max={4}
-          step={0.01}
-        />
-        <SliderControl
-          label="Position Spray"
-          value={positionSpray}
-          onChange={setPositionSpray}
-          onCommit={handleSliderCommit}
-          min={0}
-          max={0.5}
-          step={0.01}
-        />
-        <SliderControl
-          label="Pitch Spray"
-          value={pitchSpray}
-          onChange={setPitchSpray}
-          onCommit={handleSliderCommit}
-          min={0}
-          max={0.5}
-          step={0.01}
-        />
-        <SliderControl
-          label="Stereo Spread"
-          value={stereoSpread}
-          onChange={setStereoSpread}
-          onCommit={handleSliderCommit}
-          min={0}
-          max={1}
-          step={0.01}
-        />
-        <SliderControl
-          label="Gain"
-          value={gain}
-          onChange={setGain}
-          onCommit={handleSliderCommit}
-          min={0}
-          max={1}
-          step={0.01}
-        />
-      </div>
+      <div className="grid w-full max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
+        {/* Granular Controls */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold">Granular Synth</h2>
+          <div className="grid gap-4">
+            <SliderControl
+              label="Grain Size"
+              value={grainSize}
+              onChange={setGrainSize}
+              onCommit={handleSliderCommit}
+              min={5}
+              max={200}
+              step={1}
+              unit="ms"
+            />
+            <SliderControl
+              label="Density"
+              value={density}
+              onChange={setDensity}
+              onCommit={handleSliderCommit}
+              min={1}
+              max={50}
+              step={1}
+              unit="grains/s"
+            />
+            <SliderControl
+              label="Position"
+              value={position}
+              onChange={setPosition}
+              onCommit={handleSliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Pitch"
+              value={pitch}
+              onChange={setPitch}
+              onCommit={handleSliderCommit}
+              min={0.25}
+              max={4}
+              step={0.01}
+            />
+            <SliderControl
+              label="Position Spray"
+              value={positionSpray}
+              onChange={setPositionSpray}
+              onCommit={handleSliderCommit}
+              min={0}
+              max={0.5}
+              step={0.01}
+            />
+            <SliderControl
+              label="Pitch Spray"
+              value={pitchSpray}
+              onChange={setPitchSpray}
+              onCommit={handleSliderCommit}
+              min={0}
+              max={0.5}
+              step={0.01}
+            />
+            <SliderControl
+              label="Stereo Spread"
+              value={stereoSpread}
+              onChange={setStereoSpread}
+              onCommit={handleSliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={gain}
+              onChange={setGain}
+              onCommit={handleSliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <Button
+            size="lg"
+            variant={isPlaying ? "default" : "outline"}
+            onClick={handleToggle}
+            disabled={!audio.isReady || !samplesLoaded}
+            className="w-full"
+          >
+            {!samplesLoaded ? "Loading..." : isPlaying ? "Stop Granular" : "Play Granular"}
+          </Button>
+        </div>
 
-      <Button
-        size="lg"
-        variant={isPlaying ? "default" : "outline"}
-        onClick={handleToggle}
-        disabled={!audio.isReady || !samplesLoaded}
-      >
-        {!samplesLoaded ? "Loading..." : isPlaying ? "Stop" : "Play"}
-      </Button>
+        {/* Resonator Controls */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold">Resonator</h2>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Band 1</h3>
+              <SliderControl
+                label="Frequency"
+                value={band1Freq}
+                onChange={setBand1Freq}
+                onCommit={handleResonatorSliderCommit}
+                min={20}
+                max={2000}
+                step={1}
+                unit="Hz"
+              />
+              <SliderControl
+                label="Q"
+                value={band1Q}
+                onChange={setBand1Q}
+                onCommit={handleResonatorSliderCommit}
+                min={10}
+                max={100}
+                step={1}
+              />
+              <SliderControl
+                label="Gain"
+                value={band1Gain}
+                onChange={setBand1Gain}
+                onCommit={handleResonatorSliderCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Band 2</h3>
+              <SliderControl
+                label="Frequency"
+                value={band2Freq}
+                onChange={setBand2Freq}
+                onCommit={handleResonatorSliderCommit}
+                min={20}
+                max={4000}
+                step={1}
+                unit="Hz"
+              />
+              <SliderControl
+                label="Q"
+                value={band2Q}
+                onChange={setBand2Q}
+                onCommit={handleResonatorSliderCommit}
+                min={10}
+                max={100}
+                step={1}
+              />
+              <SliderControl
+                label="Gain"
+                value={band2Gain}
+                onChange={setBand2Gain}
+                onCommit={handleResonatorSliderCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Band 3</h3>
+              <SliderControl
+                label="Frequency"
+                value={band3Freq}
+                onChange={setBand3Freq}
+                onCommit={handleResonatorSliderCommit}
+                min={20}
+                max={8000}
+                step={1}
+                unit="Hz"
+              />
+              <SliderControl
+                label="Q"
+                value={band3Q}
+                onChange={setBand3Q}
+                onCommit={handleResonatorSliderCommit}
+                min={10}
+                max={100}
+                step={1}
+              />
+              <SliderControl
+                label="Gain"
+                value={band3Gain}
+                onChange={setBand3Gain}
+                onCommit={handleResonatorSliderCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+            <SliderControl
+              label="Dry/Wet Mix"
+              value={resonatorMix}
+              onChange={setResonatorMix}
+              onCommit={handleResonatorSliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <Button
+            size="lg"
+            variant={isResonatorPlaying ? "default" : "outline"}
+            onClick={handleResonatorToggle}
+            disabled={!audio.isReady || !samplesLoaded}
+            className="w-full"
+          >
+            {!samplesLoaded ? "Loading..." : isResonatorPlaying ? "Stop Resonator" : "Play Resonator"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
