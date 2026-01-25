@@ -1,13 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { useAudio } from "@/hooks/use-audio";
-import {
-  createGranular,
-  type GranularParams,
-  type GrainEnvelope,
-} from "@/lib/audio/granular";
+import { createGranular, type GranularParams } from "@/lib/audio/granular";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -64,7 +61,7 @@ function HomeComponent() {
     return <WelcomeScreen onStart={handleStart} />;
   }
 
-  return <AudioPlayground audio={audio} samplesLoaded={samplesLoaded} />;
+  return <AudioPlayground samplesLoaded={samplesLoaded} />;
 }
 
 function WelcomeScreen({ onStart }: { onStart: () => void }) {
@@ -81,58 +78,66 @@ function WelcomeScreen({ onStart }: { onStart: () => void }) {
   );
 }
 
-function AudioPlayground({
-  audio,
-  samplesLoaded,
-}: {
-  audio: ReturnType<typeof useAudio>;
-  samplesLoaded: boolean;
-}) {
-  const isGranularPlaying = useRef(false);
+function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
+  const audio = useAudio();
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  // Generate random granular parameters
-  const generateRandomGranularParams = (): GranularParams => {
-    const envelopes: GrainEnvelope[] = ["hann", "trapezoid"];
-    return {
-      samplePath: "/samples/acadia",
-      grainSize: 10 + Math.random() * 40, // 20-300ms
-      density: 2 + Math.random() * 40, // 2-20 grains/sec
-      position: Math.random(), // 0-1
-      pitch: 0.5 + Math.random() * 1.5, // 0.5-2.0
-      positionSpray: Math.random() * 0.3, // 0-0.3
-      pitchSpray: Math.random() * 0.2, // 0-0.2
-      stereoSpread: 0.3 + Math.random() * 0.7, // 0.3-1.0
-      gain: 0.4 + Math.random() * 0.3, // 0.4-0.7
-      envelope: "hann",
-    };
-  };
+  // Granular parameter state
+  const [grainSize, setGrainSize] = useState(25);
+  const [density, setDensity] = useState(10);
+  const [position, setPosition] = useState(0.5);
+  const [pitch, setPitch] = useState(1);
+  const [positionSpray, setPositionSpray] = useState(0.1);
+  const [pitchSpray, setPitchSpray] = useState(0.05);
+  const [stereoSpread, setStereoSpread] = useState(0.5);
+  const [gain, setGain] = useState(0.5);
 
-  // Granular synthesis handlers
-  const handleGranularDown = () => {
-    if (!audio.isReady || !samplesLoaded || isGranularPlaying.current) return;
+  const getGranularParams = (): GranularParams => ({
+    samplePath: "/samples/acadia",
+    grainSize,
+    density,
+    position,
+    pitch,
+    positionSpray,
+    pitchSpray,
+    stereoSpread,
+    gain,
+    envelope: "hann",
+  });
+
+  const renderGranular = (params: GranularParams) => {
     if (!sampleData.acadia) return;
-
-    const params = generateRandomGranularParams();
-    console.log("Granular params:", params);
-
     const granular = createGranular(
       "granular",
       params,
       sampleData.acadia.length,
     );
     audio.render(granular.left, granular.right);
-    isGranularPlaying.current = true;
   };
 
-  const handleGranularUp = () => {
-    if (!isGranularPlaying.current) return;
+  const handleToggle = () => {
+    if (!audio.isReady || !samplesLoaded) return;
+    if (!sampleData.acadia) return;
 
-    audio.silence();
-    isGranularPlaying.current = false;
+    if (isPlaying) {
+      audio.silence();
+      setIsPlaying(false);
+    } else {
+      const params = getGranularParams();
+      console.log("Granular params:", params);
+      renderGranular(params);
+      setIsPlaying(true);
+    }
+  };
+
+  const handleSliderCommit = () => {
+    if (!isPlaying || !audio.isReady) return;
+    const params = getGranularParams();
+    renderGranular(params);
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
       <div className="flex flex-col items-center gap-4">
         <h1 className="text-2xl font-bold">Audio Playground</h1>
         <p className="text-muted-foreground">
@@ -140,16 +145,131 @@ function AudioPlayground({
         </p>
       </div>
 
+      <div className="grid w-full max-w-md gap-6">
+        <SliderControl
+          label="Grain Size"
+          value={grainSize}
+          onChange={setGrainSize}
+          onCommit={handleSliderCommit}
+          min={5}
+          max={200}
+          step={1}
+          unit="ms"
+        />
+        <SliderControl
+          label="Density"
+          value={density}
+          onChange={setDensity}
+          onCommit={handleSliderCommit}
+          min={1}
+          max={50}
+          step={1}
+          unit="grains/s"
+        />
+        <SliderControl
+          label="Position"
+          value={position}
+          onChange={setPosition}
+          onCommit={handleSliderCommit}
+          min={0}
+          max={1}
+          step={0.01}
+        />
+        <SliderControl
+          label="Pitch"
+          value={pitch}
+          onChange={setPitch}
+          onCommit={handleSliderCommit}
+          min={0.25}
+          max={4}
+          step={0.01}
+        />
+        <SliderControl
+          label="Position Spray"
+          value={positionSpray}
+          onChange={setPositionSpray}
+          onCommit={handleSliderCommit}
+          min={0}
+          max={0.5}
+          step={0.01}
+        />
+        <SliderControl
+          label="Pitch Spray"
+          value={pitchSpray}
+          onChange={setPitchSpray}
+          onCommit={handleSliderCommit}
+          min={0}
+          max={0.5}
+          step={0.01}
+        />
+        <SliderControl
+          label="Stereo Spread"
+          value={stereoSpread}
+          onChange={setStereoSpread}
+          onCommit={handleSliderCommit}
+          min={0}
+          max={1}
+          step={0.01}
+        />
+        <SliderControl
+          label="Gain"
+          value={gain}
+          onChange={setGain}
+          onCommit={handleSliderCommit}
+          min={0}
+          max={1}
+          step={0.01}
+        />
+      </div>
+
       <Button
         size="lg"
-        variant="outline"
-        onPointerDown={handleGranularDown}
-        onPointerUp={handleGranularUp}
-        onPointerLeave={handleGranularUp}
+        variant={isPlaying ? "default" : "outline"}
+        onClick={handleToggle}
         disabled={!audio.isReady || !samplesLoaded}
       >
-        {samplesLoaded ? "Granular" : "Loading..."}
+        {!samplesLoaded ? "Loading..." : isPlaying ? "Stop" : "Play"}
       </Button>
+    </div>
+  );
+}
+
+function SliderControl({
+  label,
+  value,
+  onChange,
+  onCommit,
+  min,
+  max,
+  step,
+  unit,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  onCommit?: () => void;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between text-sm">
+        <span>{label}</span>
+        <span className="text-muted-foreground">
+          {value.toFixed(step < 1 ? 2 : 0)}
+          {unit ? ` ${unit}` : ""}
+        </span>
+      </div>
+      <Slider
+        value={[value]}
+        onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
+        onValueCommitted={onCommit}
+        min={min}
+        max={max}
+        step={step}
+      />
     </div>
   );
 }
