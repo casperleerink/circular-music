@@ -1,31 +1,70 @@
-import { el } from "@elemaudio/core";
-import type { NodeRepr_t } from "@elemaudio/core";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAudio } from "@/hooks/use-audio";
-import { createDiffuseWorld } from "@/lib/audio/diffuse-world";
-import { createEnvelope, applyEnvelope } from "@/lib/audio/envelope";
+import {
+  createGranular,
+  type GranularParams,
+  type GrainEnvelope,
+} from "@/lib/audio/granular";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
 });
 
+// Sample data stored outside component to persist across renders
+const sampleData: {
+  acadia: { buffer: Float32Array; length: number } | null;
+} = {
+  acadia: null,
+};
+
+async function loadSamples(
+  ctx: AudioContext,
+  updateVFS: (entries: Record<string, Float32Array>) => void
+) {
+  // Load acadia_waves.mp3
+  const response = await fetch("/audio/acadia_waves.mp3");
+  const arrayBuffer = await response.arrayBuffer();
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  const channelData = audioBuffer.getChannelData(0);
+
+  // Store in VFS
+  updateVFS({ "/samples/acadia": channelData });
+
+  // Store metadata
+  sampleData.acadia = {
+    buffer: channelData,
+    length: channelData.length,
+  };
+
+  console.log("Samples loaded:", {
+    acadia: { length: channelData.length, duration: audioBuffer.duration },
+  });
+}
+
 function HomeComponent() {
   const [started, setStarted] = useState(false);
+  const [samplesLoaded, setSamplesLoaded] = useState(false);
   const audio = useAudio();
 
   const handleStart = async () => {
-    await audio.initialize();
+    const ctx = await audio.initialize();
     setStarted(true);
+
+    // Load samples after audio context is ready
+    if (ctx) {
+      await loadSamples(ctx, audio.updateVirtualFileSystem);
+      setSamplesLoaded(true);
+    }
   };
 
   if (!started) {
     return <WelcomeScreen onStart={handleStart} />;
   }
 
-  return <AudioPlayground audio={audio} />;
+  return <AudioPlayground audio={audio} samplesLoaded={samplesLoaded} />;
 }
 
 function WelcomeScreen({ onStart }: { onStart: () => void }) {
@@ -44,134 +83,48 @@ function WelcomeScreen({ onStart }: { onStart: () => void }) {
 
 function AudioPlayground({
   audio,
+  samplesLoaded,
 }: {
   audio: ReturnType<typeof useAudio>;
+  samplesLoaded: boolean;
 }) {
-  const voiceKey = useRef("voice-0");
-  const isGateOpen = useRef(false);
-  const [diffuseActive, setDiffuseActive] = useState(false);
-  const diffuseActiveRef = useRef(false);
+  const isGranularPlaying = useRef(false);
 
-  // Keep ref in sync with state for use in callbacks
-  useEffect(() => {
-    diffuseActiveRef.current = diffuseActive;
-  }, [diffuseActive]);
-
-  // Creates the trigger voice signal (returns the signal, doesn't render)
-  const createTriggerVoice = useCallback((gate: number): NodeRepr_t => {
-    const key = voiceKey.current;
-
-    const gateSignal = el.const({ key: `${key}:gate`, value: gate });
-
-    // Filter frequency envelope: starts high, drops for that "blip" movement
-    const filterSeq = el.sparseq(
-      {
-        key: `${key}:filter-seq`,
-        seq: [
-          { value: 1, tickTime: 0 },
-          { value: 0.3, tickTime: 60 },
-        ],
-      },
-      el.train(1000),
-      gateSignal
-    );
-    const smoothedFilter = el.smooth(
-      el.tau2pole(0.02),
-      el.mul(gateSignal, filterSeq)
-    );
-
-    // Bandpass center frequency with envelope
-    const filterFreq = el.add(600, el.mul(smoothedFilter, 1200));
-
-    // Noise source
-    const noise = el.noise({ key: `${key}:noise` });
-
-    // Resonant bandpass filter with moving frequency - gives character without being tonal
-    const bandpassed = el.bandpass(filterFreq, 4, noise);
-
-    // Additional filtering to soften the sound
-    const filtered = el.lowpass(2500, 0.7, bandpassed);
-
-    // Main envelope - punchy but not too short
-    const env = createEnvelope({
-      key,
-      gate,
-      attack: 0.002,
-      sustain: 0.15,
-      release: 0.2,
-      sustainTickTime: 30,
-    });
-
-    // Master gain to control overall volume
-    const masterGain = 0.25;
-
-    // Apply envelope to filtered noise
-    const dryHit = el.mul(masterGain, applyEnvelope(env, filtered, 0.5));
-
-    // Reverb using multiple delay taps with feedback
-    const d1 = el.delay({ size: 44100 }, el.ms2samps(23), 0.6, dryHit);
-    const d2 = el.delay({ size: 44100 }, el.ms2samps(41), 0.55, dryHit);
-    const d3 = el.delay({ size: 44100 }, el.ms2samps(67), 0.5, dryHit);
-    const d4 = el.delay({ size: 44100 }, el.ms2samps(97), 0.45, dryHit);
-
-    // Mix delays and apply warmth
-    const reverbMix = el.add(d1, el.add(d2, el.add(d3, d4)));
-    const warmReverb = el.lowpass(3000, 0.7, reverbMix);
-
-    // Combine dry + wet
-    return el.add(dryHit, el.mul(warmReverb, 0.4));
-  }, []);
-
-  // Combined render function that mixes trigger voice with diffuse world
-  const renderAudio = useCallback(
-    (gate: number) => {
-      const triggerVoice = createTriggerVoice(gate);
-      const diffuse = createDiffuseWorld(
-        "diffuse",
-        diffuseActiveRef.current
-      );
-
-      // Mix both voices
-      const output = el.add(triggerVoice, diffuse);
-      audio.render(output, output);
-    },
-    [audio, createTriggerVoice]
-  );
-
-  // Reference to track current gate state for diffuse-only renders
-  const currentGateRef = useRef(0);
-
-  const handlePointerDown = () => {
-    if (!audio.isReady || isGateOpen.current) return;
-
-    // Ensure rising edge by setting gate to 0 first, then 1
-    currentGateRef.current = 0;
-    renderAudio(0);
-    requestAnimationFrame(() => {
-      currentGateRef.current = 1;
-      renderAudio(1);
-      isGateOpen.current = true;
-    });
+  // Generate random granular parameters
+  const generateRandomGranularParams = (): GranularParams => {
+    const envelopes: GrainEnvelope[] = ["hann", "trapezoid"];
+    return {
+      samplePath: "/samples/acadia",
+      grainSize: 20 + Math.random() * 280, // 20-300ms
+      density: 2 + Math.random() * 18, // 2-20 grains/sec
+      position: Math.random(), // 0-1
+      pitch: 0.5 + Math.random() * 1.5, // 0.5-2.0
+      positionSpray: Math.random() * 0.3, // 0-0.3
+      pitchSpray: Math.random() * 0.2, // 0-0.2
+      stereoSpread: 0.3 + Math.random() * 0.7, // 0.3-1.0
+      gain: 0.4 + Math.random() * 0.3, // 0.4-0.7
+      envelope: envelopes[Math.floor(Math.random() * envelopes.length)],
+    };
   };
 
-  const handlePointerUp = () => {
-    if (!isGateOpen.current) return;
+  // Granular synthesis handlers
+  const handleGranularDown = () => {
+    if (!audio.isReady || !samplesLoaded || isGranularPlaying.current) return;
+    if (!sampleData.acadia) return;
 
-    currentGateRef.current = 0;
-    renderAudio(0);
-    isGateOpen.current = false;
+    const params = generateRandomGranularParams();
+    console.log("Granular params:", params);
+
+    const granular = createGranular("granular", params, sampleData.acadia.length);
+    audio.render(granular.left, granular.right);
+    isGranularPlaying.current = true;
   };
 
-  // Toggle diffuse world on/off
-  const handleDiffuseToggle = () => {
-    const newState = !diffuseActive;
-    setDiffuseActive(newState);
-    diffuseActiveRef.current = newState;
+  const handleGranularUp = () => {
+    if (!isGranularPlaying.current) return;
 
-    // Re-render to apply the change
-    if (audio.isReady) {
-      renderAudio(currentGateRef.current);
-    }
+    audio.silence();
+    isGranularPlaying.current = false;
   };
 
   return (
@@ -183,32 +136,16 @@ function AudioPlayground({
         </p>
       </div>
 
-      <div className="flex gap-4">
-        <Button
-          size="lg"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          disabled={!audio.isReady}
-        >
-          Hold to Play
-        </Button>
-
-        <Button
-          size="lg"
-          variant={diffuseActive ? "default" : "outline"}
-          onClick={handleDiffuseToggle}
-          disabled={!audio.isReady}
-        >
-          {diffuseActive ? "Diffuse: On" : "Diffuse: Off"}
-        </Button>
-      </div>
-
-      {diffuseActive && (
-        <p className="text-sm text-muted-foreground max-w-md text-center">
-          Diffuse — sparse noise bursts, unpredictable filters, vapor and static
-        </p>
-      )}
+      <Button
+        size="lg"
+        variant="outline"
+        onPointerDown={handleGranularDown}
+        onPointerUp={handleGranularUp}
+        onPointerLeave={handleGranularUp}
+        disabled={!audio.isReady || !samplesLoaded}
+      >
+        {samplesLoaded ? "Granular" : "Loading..."}
+      </Button>
     </div>
   );
 }

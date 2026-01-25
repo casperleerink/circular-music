@@ -10,7 +10,7 @@ export function useAudio() {
   const nodeRef = useRef<AudioWorkletNode | null>(null);
 
   const initialize = useCallback(async () => {
-    if (ctxRef.current) return;
+    if (ctxRef.current) return ctxRef.current;
 
     const ctx = new AudioContext();
     const core = new WebRenderer();
@@ -30,6 +30,8 @@ export function useAudio() {
     ctxRef.current = ctx;
     coreRef.current = core;
     nodeRef.current = node;
+
+    return ctx;
   }, []);
 
   const render = useCallback((left: NodeRepr_t, right: NodeRepr_t) => {
@@ -41,6 +43,13 @@ export function useAudio() {
     if (!coreRef.current) return;
     coreRef.current.render(el.const({ value: 0 }), el.const({ value: 0 }));
   }, []);
+
+  const updateVirtualFileSystem = useCallback(
+    (entries: Record<string, Float32Array>) => {
+      coreRef.current?.updateVirtualFileSystem(entries);
+    },
+    []
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -59,6 +68,7 @@ export function useAudio() {
     initialize,
     render,
     silence,
+    updateVirtualFileSystem,
     ctx: ctxRef.current,
     core: coreRef.current,
   };
