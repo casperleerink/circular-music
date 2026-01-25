@@ -22,7 +22,7 @@ const sampleData: {
 
 async function loadSamples(
   ctx: AudioContext,
-  updateVFS: (entries: Record<string, Float32Array>) => void
+  updateVFS: (entries: Record<string, Float32Array>) => void,
 ) {
   // Load acadia_waves.mp3
   const response = await fetch("/audio/acadia_waves.mp3");
@@ -95,15 +95,15 @@ function AudioPlayground({
     const envelopes: GrainEnvelope[] = ["hann", "trapezoid"];
     return {
       samplePath: "/samples/acadia",
-      grainSize: 20 + Math.random() * 280, // 20-300ms
-      density: 2 + Math.random() * 18, // 2-20 grains/sec
+      grainSize: 10 + Math.random() * 40, // 20-300ms
+      density: 2 + Math.random() * 40, // 2-20 grains/sec
       position: Math.random(), // 0-1
       pitch: 0.5 + Math.random() * 1.5, // 0.5-2.0
       positionSpray: Math.random() * 0.3, // 0-0.3
       pitchSpray: Math.random() * 0.2, // 0-0.2
       stereoSpread: 0.3 + Math.random() * 0.7, // 0.3-1.0
       gain: 0.4 + Math.random() * 0.3, // 0.4-0.7
-      envelope: envelopes[Math.floor(Math.random() * envelopes.length)],
+      envelope: "hann",
     };
   };
 
@@ -115,7 +115,11 @@ function AudioPlayground({
     const params = generateRandomGranularParams();
     console.log("Granular params:", params);
 
-    const granular = createGranular("granular", params, sampleData.acadia.length);
+    const granular = createGranular(
+      "granular",
+      params,
+      sampleData.acadia.length,
+    );
     audio.render(granular.left, granular.right);
     isGranularPlaying.current = true;
   };
