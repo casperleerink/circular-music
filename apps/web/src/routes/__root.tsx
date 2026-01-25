@@ -7,6 +7,7 @@ import {
 import Header from "@/components/header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { AudioProvider } from "@/hooks/use-audio";
 
 import "../index.css";
 
@@ -43,7 +44,9 @@ function RootComponent() {
         disableTransitionOnChange
         storageKey="vite-ui-theme"
       >
-        <Outlet />
+        <AudioProvider>
+          <Outlet />
+        </AudioProvider>
         <Toaster richColors />
       </ThemeProvider>
     </>
