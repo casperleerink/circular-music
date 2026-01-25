@@ -17,11 +17,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
       {
-        title: "circular-music",
+        title: "Tidal Shaping",
       },
       {
         name: "description",
-        content: "circular-music is a web application",
+        content: "Tidal Shaping is a work in progress by Casper Leerink",
       },
     ],
     links: [
