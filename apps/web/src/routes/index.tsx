@@ -132,86 +132,69 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     mix: resonatorMix,
   });
 
-  const renderGranular = (params: GranularParams) => {
-    if (!sampleData.acadia) return;
-    const granular = createGranular(
-      "granular",
-      params,
-      sampleData.acadia.length,
-    );
-    audio.render(granular.left, granular.right);
-  };
-
-  const renderResonator = (params: ResonatorParams) => {
-    if (!sampleData.acadia) return;
-    // Play sample in a loop using el.table with a phasor
-    // Rate = sampleRate / sampleLength gives us 1 full cycle per sample duration
-    const loopRate = 44100 / sampleData.acadia.length;
-    const phasor = el.phasor(loopRate);
-    const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
-
-    // Process through resonator
-    const resonated = createResonator("resonator", params, {
-      left: sampleSignal,
-      right: sampleSignal,
-    });
-
-    // Apply output gain
-    const outputGain = el.smooth(el.tau2pole(0.02), el.const({ key: "resonator:outputGain", value: 0.5 }));
-    audio.render(
-      el.mul(resonated.left, outputGain),
-      el.mul(resonated.right, outputGain),
-    );
-  };
-
   const handleToggle = () => {
-    if (!audio.isReady || !samplesLoaded) return;
-    if (!sampleData.acadia) return;
+    if (!audio.isReady || !samplesLoaded || !sampleData.acadia) return;
 
     if (isPlaying) {
-      audio.silence();
+      audio.removeSource("granular");
       setIsPlaying(false);
     } else {
-      // Stop resonator if playing
-      if (isResonatorPlaying) {
-        setIsResonatorPlaying(false);
-      }
-      const params = getGranularParams();
-      console.log("Granular params:", params);
-      renderGranular(params);
+      const granular = createGranular(
+        "granular",
+        getGranularParams(),
+        sampleData.acadia.length
+      );
+      audio.setSource("granular", granular, { gain });
       setIsPlaying(true);
     }
   };
 
   const handleResonatorToggle = () => {
-    if (!audio.isReady || !samplesLoaded) return;
-    if (!sampleData.acadia) return;
+    if (!audio.isReady || !samplesLoaded || !sampleData.acadia) return;
 
     if (isResonatorPlaying) {
-      audio.silence();
+      audio.removeSource("resonator");
       setIsResonatorPlaying(false);
     } else {
-      // Stop granular if playing
-      if (isPlaying) {
-        setIsPlaying(false);
-      }
-      const params = getResonatorParams();
-      console.log("Resonator params:", params);
-      renderResonator(params);
+      // Play sample in a loop using el.table with a phasor
+      const loopRate = 44100 / sampleData.acadia.length;
+      const phasor = el.phasor(loopRate);
+      const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
+
+      // Process through resonator
+      const resonated = createResonator("resonator", getResonatorParams(), {
+        left: sampleSignal,
+        right: sampleSignal,
+      });
+
+      audio.setSource("resonator", resonated, { gain: 0.5 });
       setIsResonatorPlaying(true);
     }
   };
 
   const handleSliderCommit = () => {
-    if (!isPlaying || !audio.isReady) return;
-    const params = getGranularParams();
-    renderGranular(params);
+    if (!isPlaying || !audio.isReady || !sampleData.acadia) return;
+    const granular = createGranular(
+      "granular",
+      getGranularParams(),
+      sampleData.acadia.length
+    );
+    audio.setSource("granular", granular, { gain });
   };
 
   const handleResonatorSliderCommit = () => {
-    if (!isResonatorPlaying || !audio.isReady) return;
-    const params = getResonatorParams();
-    renderResonator(params);
+    if (!isResonatorPlaying || !audio.isReady || !sampleData.acadia) return;
+    // Play sample in a loop using el.table with a phasor
+    const loopRate = 44100 / sampleData.acadia.length;
+    const phasor = el.phasor(loopRate);
+    const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
+
+    const resonated = createResonator("resonator", getResonatorParams(), {
+      left: sampleSignal,
+      right: sampleSignal,
+    });
+
+    audio.setSource("resonator", resonated, { gain: 0.5 });
   };
 
   return (

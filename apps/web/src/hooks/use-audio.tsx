@@ -8,15 +8,26 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 
+type SourceEntry = {
+  signal: { left: NodeRepr_t; right: NodeRepr_t };
+  gain: number;
+};
+
 interface AudioContextValue {
   isReady: boolean;
   initialize: () => Promise<AudioContext | undefined>;
-  render: (left: NodeRepr_t, right: NodeRepr_t) => void;
+  setSource: (
+    id: string,
+    signal: { left: NodeRepr_t; right: NodeRepr_t },
+    options: { gain: number }
+  ) => void;
+  removeSource: (id: string) => void;
   silence: () => void;
   updateVirtualFileSystem: (entries: Record<string, Float32Array>) => void;
   ctx: AudioContext | null;
@@ -30,6 +41,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const ctxRef = useRef<AudioContext | null>(null);
   const coreRef = useRef<WebRenderer | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
+  const sourcesRef = useRef<Map<string, SourceEntry>>(new Map());
 
   const initialize = useCallback(async () => {
     if (ctxRef.current) return ctxRef.current;
@@ -56,15 +68,63 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     return ctx;
   }, []);
 
-  const render = useCallback((left: NodeRepr_t, right: NodeRepr_t) => {
+  const renderMix = useCallback(() => {
     if (!coreRef.current) return;
-    coreRef.current.render(left, right);
+
+    const sources = Array.from(sourcesRef.current.entries());
+    if (sources.length === 0) {
+      coreRef.current.render(el.const({ value: 0 }), el.const({ value: 0 }));
+      return;
+    }
+
+    // Apply gains and sum
+    const processed = sources.map(([id, src]) => {
+      const smoothedGain = el.smooth(
+        el.tau2pole(0.02),
+        el.const({ key: `mixer:gain:${id}`, value: src.gain })
+      );
+      return {
+        left: el.mul(src.signal.left, smoothedGain),
+        right: el.mul(src.signal.right, smoothedGain),
+      };
+    });
+
+    const mixL = processed.reduce(
+      (sum, s) => el.add(sum, s.left),
+      el.const({ value: 0 })
+    );
+    const mixR = processed.reduce(
+      (sum, s) => el.add(sum, s.right),
+      el.const({ value: 0 })
+    );
+
+    coreRef.current.render(mixL, mixR);
   }, []);
 
+  const setSource = useCallback(
+    (
+      id: string,
+      signal: { left: NodeRepr_t; right: NodeRepr_t },
+      options: { gain: number }
+    ) => {
+      sourcesRef.current.set(id, { signal, gain: options.gain });
+      renderMix();
+    },
+    [renderMix]
+  );
+
+  const removeSource = useCallback(
+    (id: string) => {
+      sourcesRef.current.delete(id);
+      renderMix();
+    },
+    [renderMix]
+  );
+
   const silence = useCallback(() => {
-    if (!coreRef.current) return;
-    coreRef.current.render(el.const({ value: 0 }), el.const({ value: 0 }));
-  }, []);
+    sourcesRef.current.clear();
+    renderMix();
+  }, [renderMix]);
 
   const updateVirtualFileSystem = useCallback(
     (entries: Record<string, Float32Array>) => {
@@ -85,21 +145,21 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return (
-    <AudioCtx.Provider
-      value={{
-        isReady,
-        initialize,
-        render,
-        silence,
-        updateVirtualFileSystem,
-        ctx: ctxRef.current,
-        core: coreRef.current,
-      }}
-    >
-      {children}
-    </AudioCtx.Provider>
+  const value = useMemo(
+    () => ({
+      isReady,
+      initialize,
+      setSource,
+      removeSource,
+      silence,
+      updateVirtualFileSystem,
+      ctx: ctxRef.current,
+      core: coreRef.current,
+    }),
+    [isReady, initialize, setSource, removeSource, silence, updateVirtualFileSystem]
   );
+
+  return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
 }
 
 export function useAudio() {
