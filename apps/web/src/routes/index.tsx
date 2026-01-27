@@ -26,6 +26,7 @@ export const Route = createFileRoute("/")({
 const AUDIO_SAMPLES = [
   { id: "acadia", name: "Acadia Waves", file: "acadia_waves.mp3" },
   { id: "circle", name: "Circle Improv", file: "circle_improv_3.mp3" },
+  { id: "melody", name: "Melody Loop", file: "melody_loop.mp3" },
 ] as const;
 
 type SampleId = (typeof AUDIO_SAMPLES)[number]["id"];
@@ -34,6 +35,7 @@ type SampleId = (typeof AUDIO_SAMPLES)[number]["id"];
 const sampleData: Record<SampleId, { buffer: Float32Array; length: number } | null> = {
   acadia: null,
   circle: null,
+  melody: null,
 };
 
 async function loadSamples(
