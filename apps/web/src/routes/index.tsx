@@ -526,6 +526,15 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
           </Button>
         </div>
       </div>
+
+      <div className="w-full max-w-4xl space-y-4">
+        <h2 className="text-lg font-semibold">Inspiratie</h2>
+        <img
+          src="/moodboard1.png"
+          alt="Moodboard"
+          className="w-full"
+        />
+      </div>
     </div>
   );
 }
