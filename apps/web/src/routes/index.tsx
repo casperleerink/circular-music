@@ -3,9 +3,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useAudio } from "@/hooks/use-audio";
-import { createGranular, type GranularParams } from "@/lib/audio/granular";
+import { createGranular, type GranularParams, type GrainEnvelope } from "@/lib/audio/granular";
 import {
   createResonator,
   type ResonatorParams,
@@ -15,35 +22,52 @@ export const Route = createFileRoute("/")({
   component: HomeComponent,
 });
 
+// Available audio samples
+const AUDIO_SAMPLES = [
+  { id: "acadia", name: "Acadia Waves", file: "acadia_waves.mp3" },
+  { id: "circle", name: "Circle Improv", file: "circle_improv_3.mp3" },
+] as const;
+
+type SampleId = (typeof AUDIO_SAMPLES)[number]["id"];
+
 // Sample data stored outside component to persist across renders
-const sampleData: {
-  acadia: { buffer: Float32Array; length: number } | null;
-} = {
+const sampleData: Record<SampleId, { buffer: Float32Array; length: number } | null> = {
   acadia: null,
+  circle: null,
 };
 
 async function loadSamples(
   ctx: AudioContext,
   updateVFS: (entries: Record<string, Float32Array>) => void,
 ) {
-  // Load acadia_waves.mp3
-  const response = await fetch("/audio/acadia_waves.mp3");
-  const arrayBuffer = await response.arrayBuffer();
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-  const channelData = audioBuffer.getChannelData(0);
+  const vfsEntries: Record<string, Float32Array> = {};
 
-  // Store in VFS
-  updateVFS({ "/samples/acadia": channelData });
+  // Load all audio samples in parallel
+  await Promise.all(
+    AUDIO_SAMPLES.map(async (sample) => {
+      const response = await fetch(`/audio/${sample.file}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const channelData = audioBuffer.getChannelData(0);
 
-  // Store metadata
-  sampleData.acadia = {
-    buffer: channelData,
-    length: channelData.length,
-  };
+      // Add to VFS entries
+      vfsEntries[`/samples/${sample.id}`] = channelData;
 
-  console.log("Samples loaded:", {
-    acadia: { length: channelData.length, duration: audioBuffer.duration },
-  });
+      // Store metadata
+      sampleData[sample.id] = {
+        buffer: channelData,
+        length: channelData.length,
+      };
+
+      console.log(`Sample loaded: ${sample.name}`, {
+        length: channelData.length,
+        duration: audioBuffer.duration,
+      });
+    })
+  );
+
+  // Update VFS with all samples at once
+  updateVFS(vfsEntries);
 }
 
 function HomeComponent() {
@@ -87,6 +111,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const audio = useAudio();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isResonatorPlaying, setIsResonatorPlaying] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<SampleId>("acadia");
 
   // Granular parameter state
   const [grainSize, setGrainSize] = useState(25);
@@ -97,6 +122,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [pitchSpray, setPitchSpray] = useState(0.05);
   const [stereoSpread, setStereoSpread] = useState(0.5);
   const [gain, setGain] = useState(0.5);
+  const [envelope, setEnvelope] = useState<GrainEnvelope>("hann");
 
   // Resonator parameter state
   const [band1Freq, setBand1Freq] = useState(220);
@@ -110,8 +136,11 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [band3Gain, setBand3Gain] = useState(0.4);
   const [resonatorMix, setResonatorMix] = useState(0.7);
 
+  const currentSampleData = sampleData[selectedSample];
+  const samplePath = `/samples/${selectedSample}`;
+
   const getGranularParams = (): GranularParams => ({
-    samplePath: "/samples/acadia",
+    samplePath,
     grainSize,
     density,
     position,
@@ -120,7 +149,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     pitchSpray,
     stereoSpread,
     gain,
-    envelope: "hann",
+    envelope,
   });
 
   const getResonatorParams = (): ResonatorParams => ({
@@ -133,7 +162,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   });
 
   const handleToggle = () => {
-    if (!audio.isReady || !samplesLoaded || !sampleData.acadia) return;
+    if (!audio.isReady || !samplesLoaded || !currentSampleData) return;
 
     if (isPlaying) {
       audio.removeSource("granular");
@@ -142,7 +171,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
       const granular = createGranular(
         "granular",
         getGranularParams(),
-        sampleData.acadia.length
+        currentSampleData.length
       );
       audio.setSource("granular", granular, { gain });
       setIsPlaying(true);
@@ -150,16 +179,16 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   };
 
   const handleResonatorToggle = () => {
-    if (!audio.isReady || !samplesLoaded || !sampleData.acadia) return;
+    if (!audio.isReady || !samplesLoaded || !currentSampleData) return;
 
     if (isResonatorPlaying) {
       audio.removeSource("resonator");
       setIsResonatorPlaying(false);
     } else {
       // Play sample in a loop using el.table with a phasor
-      const loopRate = 44100 / sampleData.acadia.length;
+      const loopRate = 44100 / currentSampleData.length;
       const phasor = el.phasor(loopRate);
-      const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
+      const sampleSignal = el.table({ path: samplePath }, phasor);
 
       // Process through resonator
       const resonated = createResonator("resonator", getResonatorParams(), {
@@ -173,21 +202,21 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   };
 
   const handleSliderCommit = () => {
-    if (!isPlaying || !audio.isReady || !sampleData.acadia) return;
+    if (!isPlaying || !audio.isReady || !currentSampleData) return;
     const granular = createGranular(
       "granular",
       getGranularParams(),
-      sampleData.acadia.length
+      currentSampleData.length
     );
     audio.setSource("granular", granular, { gain });
   };
 
   const handleResonatorSliderCommit = () => {
-    if (!isResonatorPlaying || !audio.isReady || !sampleData.acadia) return;
+    if (!isResonatorPlaying || !audio.isReady || !currentSampleData) return;
     // Play sample in a loop using el.table with a phasor
-    const loopRate = 44100 / sampleData.acadia.length;
+    const loopRate = 44100 / currentSampleData.length;
     const phasor = el.phasor(loopRate);
-    const sampleSignal = el.table({ path: "/samples/acadia" }, phasor);
+    const sampleSignal = el.table({ path: samplePath }, phasor);
 
     const resonated = createResonator("resonator", getResonatorParams(), {
       left: sampleSignal,
@@ -197,6 +226,51 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     audio.setSource("resonator", resonated, { gain: 0.5 });
   };
 
+  // Handle sample change - update playing sources
+  const handleSampleChange = (value: SampleId) => {
+    setSelectedSample(value);
+    const newSampleData = sampleData[value];
+    if (!newSampleData) return;
+    const newSamplePath = `/samples/${value}`;
+
+    // Update granular if playing
+    if (isPlaying && audio.isReady) {
+      const granular = createGranular(
+        "granular",
+        { ...getGranularParams(), samplePath: newSamplePath },
+        newSampleData.length
+      );
+      audio.setSource("granular", granular, { gain });
+    }
+
+    // Update resonator if playing
+    if (isResonatorPlaying && audio.isReady) {
+      const loopRate = 44100 / newSampleData.length;
+      const phasor = el.phasor(loopRate);
+      const sampleSignal = el.table({ path: newSamplePath }, phasor);
+
+      const resonated = createResonator("resonator", getResonatorParams(), {
+        left: sampleSignal,
+        right: sampleSignal,
+      });
+
+      audio.setSource("resonator", resonated, { gain: 0.5 });
+    }
+  };
+
+  const handleEnvelopeChange = (value: GrainEnvelope | null) => {
+    if (!value) return;
+    setEnvelope(value);
+    if (isPlaying && audio.isReady && currentSampleData) {
+      const granular = createGranular(
+        "granular",
+        { ...getGranularParams(), envelope: value },
+        currentSampleData.length
+      );
+      audio.setSource("granular", granular, { gain });
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
       <div className="flex flex-col items-center gap-4">
@@ -204,6 +278,29 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
         <p className="text-muted-foreground">
           {audio.isReady ? "Audio engine ready" : "Initializing..."}
         </p>
+      </div>
+
+      {/* Sample Selector */}
+      <div className="w-full max-w-4xl">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-medium">Audio Source</span>
+          <Select
+            value={selectedSample}
+            onValueChange={(v) => handleSampleChange(v as SampleId)}
+            disabled={!samplesLoaded}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AUDIO_SAMPLES.map((sample) => (
+                <SelectItem key={sample.id} value={sample.id}>
+                  {sample.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid w-full max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
@@ -285,6 +382,18 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
               max={1}
               step={0.01}
             />
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Envelope</span>
+              <Select value={envelope} onValueChange={handleEnvelopeChange}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hann">Hann</SelectItem>
+                  <SelectItem value="trapezoid">Trapezoid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Button
             size="lg"
