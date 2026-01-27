@@ -534,6 +534,14 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
           alt="Moodboard"
           className="w-full"
         />
+        <a
+          href="https://www.youtube.com/watch?v=uMh-fULT-Lg"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 hover:underline"
+        >
+          Barry Truax - East Wind
+        </a>
       </div>
     </div>
   );
