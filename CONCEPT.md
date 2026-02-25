@@ -25,6 +25,8 @@ Each cycle deposits and removes, but never in equal measure. Some grains stay, s
 
 ---
 
+## Think about removing sounds / visuals
+
 ## Memory Without a Mind
 
 The shoreline as a recording medium. Every storm, every calm season, every shift in current—it's all written in the geometry. But there's no retrieval, no playback.
