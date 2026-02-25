@@ -1,61 +1,65 @@
 import type { ResonatorParams } from "./resonator";
 
 /**
- * Slow melody sequence for the resonator, stretched across 30 seconds.
+ * Each resonator band independently holds a random pitch from the melody
+ * for a long duration, then slowly drifts to a new one.
  *
- * Uses the 8 unique pitches from the circular melody (MIDI 61-73)
- * spread evenly, with 3 bands per note:
- *   Band 1: fundamental
- *   Band 2: octave up + slight detune
- *   Band 3: 12th above + slight detune
+ * Band 1: fundamental, changes every ~20s
+ * Band 2: octave up + detune, changes every ~27s
+ * Band 3: 12th above + detune, changes every ~23s
  */
 
-const DURATION = 30; // seconds
-
-// Melody notes in order of appearance (unique pitches from all 3 phrases)
 const MELODY_MIDI: number[] = [68, 66, 69, 64, 63, 61, 71, 73];
 
 function midiToFreq(note: number): number {
   return 440 * Math.pow(2, (note - 69) / 12);
 }
 
-// Detune by cents
 function detuneCents(freq: number, cents: number): number {
   return freq * Math.pow(2, cents / 1200);
 }
 
-const NOTE_DURATION = DURATION / MELODY_MIDI.length; // ~3.75s per note
-
-interface NoteEntry {
-  startTime: number;
-  freq: number;
+// Simple deterministic hash for picking pitches
+function pick(band: number, period: number): number {
+  const hash = ((band * 7919 + period * 104729) ^ 0x5bd1e995) >>> 0;
+  return MELODY_MIDI[hash % MELODY_MIDI.length];
 }
 
-const SCHEDULE: NoteEntry[] = MELODY_MIDI.map((midi, i) => ({
-  startTime: i * NOTE_DURATION,
-  freq: midiToFreq(midi),
-}));
+// Hold durations per band (seconds) — staggered so they don't all shift at once
+const HOLD_DURATIONS = [45, 61, 53];
 
 /**
- * Get resonator parameters at a given time (0-30s).
- * Frequencies shift slowly through the melody pitches.
+ * Get resonator parameters at a given time.
+ * Each band independently holds a random pitch.
  */
 export function getResonatorParamsAtTime(time: number): ResonatorParams {
-  // Clamp to valid range
-  const t = Math.max(0, Math.min(DURATION, time));
+  const t = Math.max(0, time);
 
-  // Find current note
-  let noteIndex = Math.floor(t / NOTE_DURATION);
-  if (noteIndex >= SCHEDULE.length) noteIndex = SCHEDULE.length - 1;
-
-  const baseFreq = SCHEDULE[noteIndex].freq;
+  const bandFreqs = HOLD_DURATIONS.map((dur, i) => {
+    const period = Math.floor(t / dur);
+    const midi = pick(i, period);
+    return midiToFreq(midi);
+  });
 
   return {
     bands: [
-      { freq: baseFreq, q: 80, gain: 0.8 },
-      { freq: detuneCents(baseFreq * 2, 7), q: 80, gain: 0.6 },
-      { freq: detuneCents(baseFreq * 3, -5), q: 80, gain: 0.4 },
+      { freq: bandFreqs[0], q: 80, gain: 0.8 },
+      { freq: detuneCents(bandFreqs[1] * 2, 7), q: 80, gain: 0.6 },
+      { freq: detuneCents(bandFreqs[2] * 3, -5), q: 80, gain: 0.4 },
     ],
     mix: 0.7,
   };
+}
+
+/**
+ * Returns the next time (in seconds) any band will change pitch, given current time.
+ */
+export function getNextChangeTime(time: number): number {
+  const t = Math.max(0, time);
+  return Math.min(
+    ...HOLD_DURATIONS.map((dur) => {
+      const period = Math.floor(t / dur);
+      return (period + 1) * dur;
+    })
+  );
 }

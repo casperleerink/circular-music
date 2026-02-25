@@ -2,11 +2,13 @@ import { el } from "@elemaudio/core";
 import { useCallback, useEffect, useRef } from "react";
 import { useAudio } from "@/hooks/use-audio";
 import { createResonator } from "@/lib/audio/resonator";
-import { getResonatorParamsAtTime } from "@/lib/audio/resonator-melody";
+import {
+  getResonatorParamsAtTime,
+  getNextChangeTime,
+} from "@/lib/audio/resonator-melody";
 
 const SAMPLE_FILE = "acadia_waves.mp3";
 const SAMPLE_PATH = "/samples/acadia";
-const DURATION = 30; // seconds — matches camera path
 
 // Store sample metadata outside component
 let sampleLength: number | null = null;
@@ -20,23 +22,21 @@ export function useShorelineAudio() {
   const startedRef = useRef(false);
   const rafRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
-  const lastNoteIndexRef = useRef<number>(-1);
+  const nextChangeRef = useRef<number>(0);
 
   const updateResonator = useCallback(() => {
     if (!sampleLength) return;
 
     const elapsed = (performance.now() - startTimeRef.current) / 1000;
-    if (elapsed > DURATION) return; // sustain last note, stop updating
 
-    const params = getResonatorParamsAtTime(elapsed);
-
-    // Only re-render when note changes (every ~3.75s)
-    const noteIndex = Math.floor(elapsed / (DURATION / 8));
-    if (noteIndex === lastNoteIndexRef.current) {
+    // Only re-render when a band changes pitch
+    if (elapsed < nextChangeRef.current) {
       rafRef.current = requestAnimationFrame(updateResonator);
       return;
     }
-    lastNoteIndexRef.current = noteIndex;
+    nextChangeRef.current = getNextChangeTime(elapsed);
+
+    const params = getResonatorParamsAtTime(elapsed);
 
     // Rebuild audio graph with new frequencies
     const loopRate = 44100 / sampleLength;
@@ -84,7 +84,7 @@ export function useShorelineAudio() {
 
     // Start update loop
     startTimeRef.current = performance.now();
-    lastNoteIndexRef.current = 0;
+    nextChangeRef.current = getNextChangeTime(0);
     rafRef.current = requestAnimationFrame(updateResonator);
   }, [audio, updateResonator]);
 

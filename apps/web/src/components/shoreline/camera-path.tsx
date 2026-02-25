@@ -3,8 +3,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { sampleHeight } from "./noise";
 
-const DURATION = 60; // seconds
-const HEIGHT_OFFSET = 1.8;
+const DURATION = 120; // seconds
+const HEIGHT_OFFSET = 1.0;
 const LOOK_AHEAD = 0.015;
 const NUM_CONTROL_POINTS = 7;
 

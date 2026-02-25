@@ -22,7 +22,10 @@ function processChannel(
 ): NodeRepr_t {
   // Create 3 bandpass filters in parallel
   const bandOutputs = params.bands.map((band, i) => {
-    const freq = el.const({ key: `${key}:b${i}:freq`, value: band.freq });
+    const freq = el.smooth(
+      el.tau2pole(0.2),
+      el.const({ key: `${key}:b${i}:freq`, value: band.freq })
+    );
     const q = el.const({ key: `${key}:b${i}:q`, value: band.q });
     const gain = el.const({ key: `${key}:b${i}:gain`, value: band.gain });
 
