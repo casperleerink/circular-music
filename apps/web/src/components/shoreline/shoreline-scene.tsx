@@ -1,12 +1,12 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { ShorelineMesh } from "./shoreline-mesh";
 import { Pebbles } from "./pebbles";
+import { CameraPath } from "./camera-path";
 
-export function ShorelineScene() {
+export function ShorelineScene({ started }: { started: boolean }) {
   return (
-    <div className="h-screen w-screen">
+    <div className="absolute inset-0">
       <Canvas
         camera={{ position: [0, 3.5, 7], fov: 45 }}
         gl={{
@@ -18,7 +18,7 @@ export function ShorelineScene() {
         <color attach="background" args={["#F5F4F2"]} />
         <ShorelineMesh />
         <Pebbles />
-        <OrbitControls makeDefault />
+        {started && <CameraPath />}
         <ambientLight intensity={0.3} />
         <directionalLight position={[5, 2, 3]} intensity={0.5} />
       </Canvas>

@@ -14,6 +14,12 @@ import { Slider } from "@/components/ui/slider";
 import { useAudio } from "@/hooks/use-audio";
 import { createGranular, type GranularParams, type GrainEnvelope } from "@/lib/audio/granular";
 import {
+  createMelodySynth,
+  DEFAULT_MELODY_PARAMS,
+  type MelodySynthParams,
+  type MelodyWaveform,
+} from "@/lib/audio/melody-synth";
+import {
   createResonator,
   type ResonatorParams,
 } from "@/lib/audio/resonator";
@@ -113,6 +119,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const audio = useAudio();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isResonatorPlaying, setIsResonatorPlaying] = useState(false);
+  const [isMelodyPlaying, setIsMelodyPlaying] = useState(false);
   const [selectedSample, setSelectedSample] = useState<SampleId>("acadia");
 
   // Granular parameter state
@@ -125,6 +132,19 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [stereoSpread, setStereoSpread] = useState(0.5);
   const [gain, setGain] = useState(0.5);
   const [envelope, setEnvelope] = useState<GrainEnvelope>("hann");
+
+  // Melody synth parameter state
+  const [melodyWaveform, setMelodyWaveform] = useState<MelodyWaveform>(DEFAULT_MELODY_PARAMS.waveform);
+  const [melodyDetune, setMelodyDetune] = useState(DEFAULT_MELODY_PARAMS.detune);
+  const [melodyAttack, setMelodyAttack] = useState(DEFAULT_MELODY_PARAMS.attack);
+  const [melodyRelease, setMelodyRelease] = useState(DEFAULT_MELODY_PARAMS.release);
+  const [melodyReverbMix, setMelodyReverbMix] = useState(DEFAULT_MELODY_PARAMS.reverbMix);
+  const [melodyGain, setMelodyGain] = useState(DEFAULT_MELODY_PARAMS.gain);
+  const [filterCutoff, setFilterCutoff] = useState(DEFAULT_MELODY_PARAMS.filterCutoff);
+  const [filterEnvAmount, setFilterEnvAmount] = useState(DEFAULT_MELODY_PARAMS.filterEnvAmount);
+  const [filterAttack, setFilterAttack] = useState(DEFAULT_MELODY_PARAMS.filterAttack);
+  const [filterRelease, setFilterRelease] = useState(DEFAULT_MELODY_PARAMS.filterRelease);
+  const [filterQ, setFilterQ] = useState(DEFAULT_MELODY_PARAMS.filterQ);
 
   // Resonator parameter state
   const [band1Freq, setBand1Freq] = useState(220);
@@ -162,6 +182,39 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     ],
     mix: resonatorMix,
   });
+
+  const getMelodyParams = (): MelodySynthParams => ({
+    waveform: melodyWaveform,
+    detune: melodyDetune,
+    attack: melodyAttack,
+    release: melodyRelease,
+    reverbMix: melodyReverbMix,
+    gain: melodyGain,
+    filterCutoff,
+    filterEnvAmount,
+    filterAttack,
+    filterRelease,
+    filterQ,
+  });
+
+  const handleMelodyToggle = () => {
+    if (!audio.isReady) return;
+
+    if (isMelodyPlaying) {
+      audio.removeSource("melody");
+      setIsMelodyPlaying(false);
+    } else {
+      const melody = createMelodySynth("melody", getMelodyParams());
+      audio.setSource("melody", melody, { gain: melodyGain });
+      setIsMelodyPlaying(true);
+    }
+  };
+
+  const handleMelodySliderCommit = () => {
+    if (!isMelodyPlaying || !audio.isReady) return;
+    const melody = createMelodySynth("melody", getMelodyParams());
+    audio.setSource("melody", melody, { gain: melodyGain });
+  };
 
   const handleToggle = () => {
     if (!audio.isReady || !samplesLoaded || !currentSampleData) return;
@@ -303,6 +356,155 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* Melody Synth Controls */}
+      <div className="w-full max-w-4xl space-y-6">
+        <h2 className="text-lg font-semibold">Melody Synth</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Waveform</span>
+              <Select
+                value={melodyWaveform}
+                onValueChange={(v) => {
+                  setMelodyWaveform(v as MelodyWaveform);
+                  if (isMelodyPlaying && audio.isReady) {
+                    const melody = createMelodySynth("melody", {
+                      ...getMelodyParams(),
+                      waveform: v as MelodyWaveform,
+                    });
+                    audio.setSource("melody", melody, { gain: melodyGain });
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sine">Sine</SelectItem>
+                  <SelectItem value="triangle">Triangle</SelectItem>
+                  <SelectItem value="square">Square</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <SliderControl
+              label="Detune"
+              value={melodyDetune}
+              onChange={setMelodyDetune}
+              onCommit={handleMelodySliderCommit}
+              min={0}
+              max={50}
+              step={1}
+              unit="cents"
+            />
+            <SliderControl
+              label="Attack"
+              value={melodyAttack}
+              onChange={setMelodyAttack}
+              onCommit={handleMelodySliderCommit}
+              min={0.001}
+              max={0.5}
+              step={0.001}
+              unit="s"
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Release"
+              value={melodyRelease}
+              onChange={setMelodyRelease}
+              onCommit={handleMelodySliderCommit}
+              min={0.01}
+              max={1}
+              step={0.01}
+              unit="s"
+            />
+            <SliderControl
+              label="Reverb Mix"
+              value={melodyReverbMix}
+              onChange={setMelodyReverbMix}
+              onCommit={handleMelodySliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={melodyGain}
+              onChange={setMelodyGain}
+              onCommit={handleMelodySliderCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+        <h3 className="text-sm font-medium text-muted-foreground">Filter</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Cutoff"
+              value={filterCutoff}
+              onChange={setFilterCutoff}
+              onCommit={handleMelodySliderCommit}
+              min={100}
+              max={8000}
+              step={10}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Env Amount"
+              value={filterEnvAmount}
+              onChange={setFilterEnvAmount}
+              onCommit={handleMelodySliderCommit}
+              min={0}
+              max={8000}
+              step={10}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Resonance (Q)"
+              value={filterQ}
+              onChange={setFilterQ}
+              onCommit={handleMelodySliderCommit}
+              min={0.5}
+              max={10}
+              step={0.1}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Filter Attack"
+              value={filterAttack}
+              onChange={setFilterAttack}
+              onCommit={handleMelodySliderCommit}
+              min={0.001}
+              max={0.5}
+              step={0.001}
+              unit="s"
+            />
+            <SliderControl
+              label="Filter Release"
+              value={filterRelease}
+              onChange={setFilterRelease}
+              onCommit={handleMelodySliderCommit}
+              min={0.01}
+              max={2}
+              step={0.01}
+              unit="s"
+            />
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant={isMelodyPlaying ? "default" : "outline"}
+          onClick={handleMelodyToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isMelodyPlaying ? "Stop Melody" : "Play Melody"}
+        </Button>
       </div>
 
       <div className="grid w-full max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
