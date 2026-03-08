@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { sampleHeight } from "./noise";
 import type { TimelineState } from "@/hooks/use-timeline";
 
-const DURATION = 120; // seconds
+const DURATION = 231; // seconds — 3m51s
 const HEIGHT_OFFSET = 1.0;
 const LOOK_AHEAD = 0.015;
 const NUM_CONTROL_POINTS = 7;

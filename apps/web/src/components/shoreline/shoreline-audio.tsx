@@ -10,9 +10,12 @@ import type { TimelineState } from "@/hooks/use-timeline";
 
 const SAMPLE_FILE = "acadia_waves.mp3";
 const SAMPLE_PATH = "/samples/acadia";
+const MELODY_FILE = "circular-music-melody.mp3";
+const MELODY_PATH = "/samples/melody";
 
 // Store sample metadata outside component
 let sampleLength: number | null = null;
+let melodyLength: number | null = null;
 
 /**
  * Hook that manages resonator audio for the shoreline scene.
@@ -43,6 +46,17 @@ export function useShorelineAudio(
       });
 
       audio.setSource("resonator", resonated, { gain: 0.5 });
+
+      // Render melody if loaded
+      if (melodyLength) {
+        const melodyRate = 44100 / melodyLength;
+        const melodyPhasor = el.phasor(melodyRate);
+        const melodySignal = el.table({ path: MELODY_PATH, key: "melody-table" }, melodyPhasor);
+        audio.setSource("melody", {
+          left: melodySignal,
+          right: melodySignal,
+        }, { gain: 0.5 });
+      }
     },
     [audio],
   );
@@ -58,6 +72,7 @@ export function useShorelineAudio(
       if (currentState === "stopped" || currentState === "paused") {
         // Mute on stop/pause
         audio.removeSource("resonator");
+        audio.removeSource("melody");
         prevStateRef.current = currentState;
         if (currentState === "stopped") {
           nextChangeRef.current = 0;
@@ -105,6 +120,15 @@ export function useShorelineAudio(
     sampleLength = channelData.length;
     audio.updateVirtualFileSystem({ [SAMPLE_PATH]: channelData });
 
+    // Load melody sample
+    const melodyResponse = await fetch(`/audio/${MELODY_FILE}`);
+    const melodyArrayBuffer = await melodyResponse.arrayBuffer();
+    const melodyAudioBuffer = await ctx.decodeAudioData(melodyArrayBuffer);
+    const melodyChannelData = melodyAudioBuffer.getChannelData(0);
+
+    melodyLength = melodyChannelData.length;
+    audio.updateVirtualFileSystem({ [MELODY_PATH]: melodyChannelData });
+
     // Initial render
     renderAtTime(0);
 
@@ -117,7 +141,10 @@ export function useShorelineAudio(
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (startedRef.current) audio.removeSource("resonator");
+      if (startedRef.current) {
+        audio.removeSource("resonator");
+        audio.removeSource("melody");
+      }
     };
   }, [audio]);
 

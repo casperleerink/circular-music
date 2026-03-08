@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type TimelineState = "stopped" | "playing" | "paused";
 
-const DURATION = 120; // seconds — matches camera path
+const DURATION = 231; // seconds — 3m51s, matches camera path
 
 export interface Timeline {
   /** Current time in seconds */
