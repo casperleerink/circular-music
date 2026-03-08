@@ -48,6 +48,7 @@ export function getResonatorParamsAtTime(time: number): ResonatorParams {
       { freq: detuneCents(bandFreqs[2] * 3, -5), q: 80, gain: 0.4 },
     ],
     mix: 0.7,
+    fadeIn: 4,
   };
 }
 

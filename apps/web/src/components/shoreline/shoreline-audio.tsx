@@ -12,6 +12,7 @@ const SAMPLE_FILE = "acadia_waves.mp3";
 const SAMPLE_PATH = "/samples/acadia";
 const MELODY_FILE = "circular-music-melody.mp3";
 const MELODY_PATH = "/samples/melody";
+const MELODY_DELAY = 5; // seconds — melody starts after this delay
 
 // Store sample metadata outside component
 let sampleLength: number | null = null;
@@ -30,6 +31,7 @@ export function useShorelineAudio(
   const rafRef = useRef<number>(0);
   const nextChangeRef = useRef<number>(0);
   const prevStateRef = useRef<TimelineState>("stopped");
+  const melodyStartedRef = useRef(false);
 
   const renderAtTime = useCallback(
     (elapsed: number) => {
@@ -47,8 +49,8 @@ export function useShorelineAudio(
 
       audio.setSource("resonator", resonated, { gain: 0.5 });
 
-      // Render melody if loaded
-      if (melodyLength) {
+      // Render melody if loaded and past delay
+      if (melodyLength && elapsed >= MELODY_DELAY) {
         const melodyRate = 44100 / melodyLength;
         const melodyPhasor = el.phasor(melodyRate);
         const melodySignal = el.table({ path: MELODY_PATH, key: "melody-table" }, melodyPhasor);
@@ -56,6 +58,8 @@ export function useShorelineAudio(
           left: melodySignal,
           right: melodySignal,
         }, { gain: 0.5 });
+      } else if (melodyLength && elapsed < MELODY_DELAY) {
+        audio.removeSource("melody");
       }
     },
     [audio],
@@ -76,6 +80,7 @@ export function useShorelineAudio(
         prevStateRef.current = currentState;
         if (currentState === "stopped") {
           nextChangeRef.current = 0;
+          melodyStartedRef.current = false;
         }
         rafRef.current = requestAnimationFrame(updateResonator);
         return;
@@ -92,8 +97,13 @@ export function useShorelineAudio(
       return;
     }
 
-    // Only re-render when a band changes pitch
-    if (elapsed < nextChangeRef.current) {
+    // Force re-render when melody delay is crossed
+    const melodyReady = elapsed >= MELODY_DELAY;
+    const melodyJustStarted = melodyReady && !melodyStartedRef.current;
+    melodyStartedRef.current = melodyReady;
+
+    // Only re-render when a band changes pitch or melody just started
+    if (elapsed < nextChangeRef.current && !melodyJustStarted) {
       rafRef.current = requestAnimationFrame(updateResonator);
       return;
     }

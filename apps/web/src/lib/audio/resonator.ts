@@ -10,6 +10,7 @@ export interface ResonatorBand {
 export interface ResonatorParams {
   bands: [ResonatorBand, ResonatorBand, ResonatorBand];
   mix: number; // 0 = dry, 1 = wet
+  fadeIn?: number; // fade-in duration in seconds (default: 0)
 }
 
 /**
@@ -64,7 +65,19 @@ export function createResonator(
   input: { left: NodeRepr_t; right: NodeRepr_t }
 ): { left: NodeRepr_t; right: NodeRepr_t } {
   // Process each channel through the resonator bank
-  const left = processChannel(`${key}:L`, params, input.left);
-  const right = processChannel(`${key}:R`, params, input.right);
+  let left = processChannel(`${key}:L`, params, input.left);
+  let right = processChannel(`${key}:R`, params, input.right);
+
+  // Fade-in: exponential ramp reaching ~99.9% at fadeIn seconds
+  if (params.fadeIn && params.fadeIn > 0) {
+    const tau = params.fadeIn / 6.9;
+    const envelope = el.smooth(
+      el.tau2pole(tau),
+      el.const({ key: `${key}:fadeIn`, value: 1 }),
+    );
+    left = el.mul(left, envelope);
+    right = el.mul(right, envelope);
+  }
+
   return { left, right };
 }
