@@ -6,6 +6,7 @@ import {
   getResonatorParamsAtTime,
   getNextChangeTime,
 } from "@/lib/audio/resonator-melody";
+import type { TimelineState } from "@/hooks/use-timeline";
 
 const SAMPLE_FILE = "acadia_waves.mp3";
 const SAMPLE_PATH = "/samples/acadia";
@@ -15,19 +16,66 @@ let sampleLength: number | null = null;
 
 /**
  * Hook that manages resonator audio for the shoreline scene.
- * Returns a `start` function to call on user interaction (unlocks AudioContext).
+ * Accepts timeline refs to sync audio with transport controls.
  */
-export function useShorelineAudio() {
+export function useShorelineAudio(
+  timeRef: React.RefObject<number>,
+  stateRef: React.RefObject<TimelineState>,
+) {
   const audio = useAudio();
   const startedRef = useRef(false);
   const rafRef = useRef<number>(0);
-  const startTimeRef = useRef<number>(0);
   const nextChangeRef = useRef<number>(0);
+  const prevStateRef = useRef<TimelineState>("stopped");
+
+  const renderAtTime = useCallback(
+    (elapsed: number) => {
+      if (!sampleLength) return;
+
+      const params = getResonatorParamsAtTime(elapsed);
+      const loopRate = 44100 / sampleLength;
+      const phasor = el.phasor(loopRate);
+      const sampleSignal = el.table({ path: SAMPLE_PATH }, phasor);
+
+      const resonated = createResonator("resonator", params, {
+        left: sampleSignal,
+        right: sampleSignal,
+      });
+
+      audio.setSource("resonator", resonated, { gain: 0.5 });
+    },
+    [audio],
+  );
 
   const updateResonator = useCallback(() => {
     if (!sampleLength) return;
 
-    const elapsed = (performance.now() - startTimeRef.current) / 1000;
+    const currentState = stateRef.current;
+    const elapsed = timeRef.current;
+
+    // Handle state transitions
+    if (currentState !== prevStateRef.current) {
+      if (currentState === "stopped" || currentState === "paused") {
+        // Mute on stop/pause
+        audio.removeSource("resonator");
+        prevStateRef.current = currentState;
+        if (currentState === "stopped") {
+          nextChangeRef.current = 0;
+        }
+        rafRef.current = requestAnimationFrame(updateResonator);
+        return;
+      }
+      if (currentState === "playing") {
+        // Re-render on resume
+        nextChangeRef.current = 0; // force re-render
+      }
+      prevStateRef.current = currentState;
+    }
+
+    if (currentState !== "playing") {
+      rafRef.current = requestAnimationFrame(updateResonator);
+      return;
+    }
 
     // Only re-render when a band changes pitch
     if (elapsed < nextChangeRef.current) {
@@ -36,24 +84,12 @@ export function useShorelineAudio() {
     }
     nextChangeRef.current = getNextChangeTime(elapsed);
 
-    const params = getResonatorParamsAtTime(elapsed);
-
-    // Rebuild audio graph with new frequencies
-    const loopRate = 44100 / sampleLength;
-    const phasor = el.phasor(loopRate);
-    const sampleSignal = el.table({ path: SAMPLE_PATH }, phasor);
-
-    const resonated = createResonator("resonator", params, {
-      left: sampleSignal,
-      right: sampleSignal,
-    });
-
-    audio.setSource("resonator", resonated, { gain: 0.5 });
+    renderAtTime(elapsed);
 
     rafRef.current = requestAnimationFrame(updateResonator);
-  }, [audio]);
+  }, [audio, timeRef, stateRef, renderAtTime]);
 
-  const start = useCallback(async () => {
+  const initialize = useCallback(async () => {
     if (startedRef.current) return;
     startedRef.current = true;
 
@@ -69,24 +105,13 @@ export function useShorelineAudio() {
     sampleLength = channelData.length;
     audio.updateVirtualFileSystem({ [SAMPLE_PATH]: channelData });
 
-    // Initial render with first note
-    const params = getResonatorParamsAtTime(0);
-    const loopRate = 44100 / sampleLength;
-    const phasor = el.phasor(loopRate);
-    const sampleSignal = el.table({ path: SAMPLE_PATH }, phasor);
-
-    const resonated = createResonator("resonator", params, {
-      left: sampleSignal,
-      right: sampleSignal,
-    });
-
-    audio.setSource("resonator", resonated, { gain: 0.5 });
+    // Initial render
+    renderAtTime(0);
 
     // Start update loop
-    startTimeRef.current = performance.now();
     nextChangeRef.current = getNextChangeTime(0);
     rafRef.current = requestAnimationFrame(updateResonator);
-  }, [audio, updateResonator]);
+  }, [audio, renderAtTime, updateResonator]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -96,5 +121,5 @@ export function useShorelineAudio() {
     };
   }, [audio]);
 
-  return { start };
+  return { initialize };
 }

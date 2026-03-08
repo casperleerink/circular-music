@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { sampleHeight } from "./noise";
+import type { TimelineState } from "@/hooks/use-timeline";
 
 const DURATION = 120; // seconds
 const HEIGHT_OFFSET = 1.0;
@@ -29,10 +30,14 @@ function easeT(t: number): number {
   return t;
 }
 
-export function CameraPath() {
+export function CameraPath({
+  timeRef,
+  stateRef,
+}: {
+  timeRef: React.RefObject<number>;
+  stateRef: React.RefObject<TimelineState>;
+}) {
   const { camera } = useThree();
-  const startTime = useRef<number | null>(null);
-  const done = useRef(false);
 
   const curve = useMemo(() => {
     const dir = END.clone().sub(START);
@@ -55,16 +60,19 @@ export function CameraPath() {
   const lookAtTarget = useRef(new THREE.Vector3());
   const smoothY = useRef(0);
   const initialized = useRef(false);
+  const prevState = useRef<TimelineState>("stopped");
 
-  useFrame((_, delta) => {
-    if (done.current) return;
+  useFrame(() => {
+    const currentState = stateRef.current;
+    const currentTime = timeRef.current;
 
-    if (startTime.current === null) {
-      startTime.current = 0;
+    // Reset smooth state on stop
+    if (currentState === "stopped" && prevState.current !== "stopped") {
+      initialized.current = false;
     }
-    startTime.current += delta;
+    prevState.current = currentState;
 
-    const rawT = Math.min(startTime.current / DURATION, 1);
+    const rawT = Math.min(currentTime / DURATION, 1);
     const t = easeT(rawT);
 
     // Position on spline
@@ -95,10 +103,6 @@ export function CameraPath() {
       lookAtTarget.current.lerp(ahead, 0.05);
     }
     camera.lookAt(lookAtTarget.current);
-
-    if (rawT >= 1) {
-      done.current = true;
-    }
   });
 
   return null;
