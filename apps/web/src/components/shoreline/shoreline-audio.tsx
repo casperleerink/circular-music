@@ -13,10 +13,19 @@ const SAMPLE_PATH = "/samples/acadia";
 const MELODY_FILE = "circular-music-melody.mp3";
 const MELODY_PATH = "/samples/melody";
 const MELODY_DELAY = 5; // seconds — melody starts after this delay
+const SAMPLE_RATE = 44100;
 
 // Store sample metadata outside component
 let sampleLength: number | null = null;
 let melodyLength: number | null = null;
+
+/**
+ * Calculate the startOffset (in samples) for a looping sample at a given time.
+ */
+function loopOffset(elapsed: number, lengthInSamples: number): number {
+  const durationSec = lengthInSamples / SAMPLE_RATE;
+  return Math.floor((elapsed % durationSec) * SAMPLE_RATE);
+}
 
 /**
  * Hook that manages resonator audio for the shoreline scene.
@@ -32,15 +41,22 @@ export function useShorelineAudio(
   const nextChangeRef = useRef<number>(0);
   const prevStateRef = useRef<TimelineState>("stopped");
   const melodyStartedRef = useRef(false);
+  const prevElapsedRef = useRef(0);
+  const seekCountRef = useRef(0);
 
   const renderAtTime = useCallback(
     (elapsed: number) => {
       if (!sampleLength) return;
 
       const params = getResonatorParamsAtTime(elapsed);
-      const loopRate = 44100 / sampleLength;
-      const phasor = el.phasor(loopRate);
-      const sampleSignal = el.table({ path: SAMPLE_PATH }, phasor);
+      const sk = seekCountRef.current;
+
+      // Use el.sample in loop mode with startOffset so scrubbing repositions audio
+      const offset = loopOffset(elapsed, sampleLength);
+      const sampleSignal = el.sample(
+        { path: SAMPLE_PATH, mode: "loop" as const, startOffset: offset, key: `sample-${sk}` },
+        1, 1,
+      );
 
       const resonated = createResonator("resonator", params, {
         left: sampleSignal,
@@ -51,9 +67,12 @@ export function useShorelineAudio(
 
       // Render melody if loaded and past delay
       if (melodyLength && elapsed >= MELODY_DELAY) {
-        const melodyRate = 44100 / melodyLength;
-        const melodyPhasor = el.phasor(melodyRate);
-        const melodySignal = el.table({ path: MELODY_PATH, key: "melody-table" }, melodyPhasor);
+        const melodyElapsed = elapsed - MELODY_DELAY;
+        const melodyOffset = loopOffset(melodyElapsed, melodyLength);
+        const melodySignal = el.sample(
+          { path: MELODY_PATH, mode: "loop" as const, startOffset: melodyOffset, key: `melody-${sk}` },
+          1, 1,
+        );
         audio.setSource("melody", {
           left: melodySignal,
           right: melodySignal,
@@ -81,13 +100,15 @@ export function useShorelineAudio(
         if (currentState === "stopped") {
           nextChangeRef.current = 0;
           melodyStartedRef.current = false;
+          seekCountRef.current++;
         }
         rafRef.current = requestAnimationFrame(updateResonator);
         return;
       }
       if (currentState === "playing") {
-        // Re-render on resume
-        nextChangeRef.current = 0; // force re-render
+        // Re-render on resume — reset seek tracking to avoid false detection
+        nextChangeRef.current = 0;
+        prevElapsedRef.current = elapsed;
       }
       prevStateRef.current = currentState;
     }
@@ -97,13 +118,22 @@ export function useShorelineAudio(
       return;
     }
 
+    // Detect seek: time jumped backwards or forward by more than expected
+    const timeDelta = elapsed - prevElapsedRef.current;
+    prevElapsedRef.current = elapsed;
+    const isSeek = timeDelta < -0.05 || timeDelta > 0.2;
+    if (isSeek) {
+      seekCountRef.current++;
+      nextChangeRef.current = 0; // force re-render
+    }
+
     // Force re-render when melody delay is crossed
     const melodyReady = elapsed >= MELODY_DELAY;
     const melodyJustStarted = melodyReady && !melodyStartedRef.current;
     melodyStartedRef.current = melodyReady;
 
-    // Only re-render when a band changes pitch or melody just started
-    if (elapsed < nextChangeRef.current && !melodyJustStarted) {
+    // Only re-render when a band changes pitch, melody just started, or user seeked
+    if (elapsed < nextChangeRef.current && !melodyJustStarted && !isSeek) {
       rafRef.current = requestAnimationFrame(updateResonator);
       return;
     }

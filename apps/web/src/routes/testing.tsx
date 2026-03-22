@@ -33,6 +33,11 @@ import {
   type MelodicEmergenceParams,
 } from "@/lib/audio/melodic-emergence";
 import {
+  createTidalEmergence,
+  DEFAULT_TIDAL_EMERGENCE_PARAMS,
+  type TidalEmergenceParams,
+} from "@/lib/audio/tidal-emergence";
+import {
   createMelodySynth,
   DEFAULT_MELODY_PARAMS,
   type MelodySynthParams,
@@ -220,6 +225,21 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [meReverbMix, setMeReverbMix] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.reverbMix);
   const [meGain, setMeGain] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.gain);
 
+  // === Tidal Emergence parameter state ===
+  const [isTidalEmergencePlaying, setIsTidalEmergencePlaying] = useState(false);
+  const [teErosion, setTeErosion] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.erosion);
+  const [teVoice1Tonality, setTeVoice1Tonality] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.voice1Tonality);
+  const [teVoice2Tonality, setTeVoice2Tonality] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.voice2Tonality);
+  const [teVoice3Tonality, setTeVoice3Tonality] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.voice3Tonality);
+  const [teUseErosion, setTeUseErosion] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.useErosion);
+  const [tePortamento, setTePortamento] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.portamento);
+  const [teVibratoRate, setTeVibratoRate] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.vibratoRate);
+  const [teVibratoDepth, setTeVibratoDepth] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.vibratoDepth);
+  const [teNoiseColor, setTeNoiseColor] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.noiseColor);
+  const [teNoiseQ, setTeNoiseQ] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.noiseQ);
+  const [teReverbMix, setTeReverbMix] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.reverbMix);
+  const [teGain, setTeGain] = useState(DEFAULT_TIDAL_EMERGENCE_PARAMS.gain);
+
   // === Resonant Tide parameter state ===
   const [isResonantTidePlaying, setIsResonantTidePlaying] = useState(false);
   const [rtRootNote, setRtRootNote] = useState(DEFAULT_RESONANT_TIDE_PARAMS.rootNote);
@@ -318,6 +338,40 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     if (!isMelodicEmergencePlaying || !audio.isReady) return;
     const synth = createMelodicEmergence("melodicEmergence", getMelodicEmergenceParams());
     audio.setSource("melodicEmergence", synth, { gain: meGain });
+  };
+
+  // === Tidal Emergence handlers ===
+  const getTidalEmergenceParams = (): TidalEmergenceParams => ({
+    erosion: teErosion,
+    voice1Tonality: teVoice1Tonality,
+    voice2Tonality: teVoice2Tonality,
+    voice3Tonality: teVoice3Tonality,
+    useErosion: teUseErosion,
+    portamento: tePortamento,
+    vibratoRate: teVibratoRate,
+    vibratoDepth: teVibratoDepth,
+    noiseColor: teNoiseColor,
+    noiseQ: teNoiseQ,
+    reverbMix: teReverbMix,
+    gain: teGain,
+  });
+
+  const handleTidalEmergenceToggle = () => {
+    if (!audio.isReady) return;
+    if (isTidalEmergencePlaying) {
+      audio.removeSource("tidalEmergence");
+      setIsTidalEmergencePlaying(false);
+    } else {
+      const synth = createTidalEmergence("tidalEmergence", getTidalEmergenceParams());
+      audio.setSource("tidalEmergence", synth, { gain: teGain });
+      setIsTidalEmergencePlaying(true);
+    }
+  };
+
+  const handleTidalEmergenceCommit = () => {
+    if (!isTidalEmergencePlaying || !audio.isReady) return;
+    const synth = createTidalEmergence("tidalEmergence", getTidalEmergenceParams());
+    audio.setSource("tidalEmergence", synth, { gain: teGain });
   };
 
   // === Sine Emergence handlers ===
@@ -750,6 +804,186 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
           className="w-full"
         >
           {isMelodyPlaying ? "Stop Melody" : "Play Melody"}
+        </Button>
+      </div>
+
+      {/* ======== TIDAL EMERGENCE ======== */}
+      <div className="w-full max-w-4xl space-y-6 border-2 border-foreground/20 rounded-lg p-6">
+        <div>
+          <h2 className="text-xl font-bold">Tidal Emergence</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Three voices exist simultaneously inside shared noise. As erosion increases, voices progressively resolve from the noise bed — first the original melody, then a canon at the 5th below, then an augmented bass line an octave below. The noise IS the unresolved sum of all voices.
+          </p>
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Erosion / Tonality</h3>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                teUseErosion
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-transparent text-foreground border-foreground/30"
+              }`}
+              onClick={() => {
+                setTeUseErosion(true);
+                if (isTidalEmergencePlaying && audio.isReady) {
+                  const synth = createTidalEmergence("tidalEmergence", { ...getTidalEmergenceParams(), useErosion: true });
+                  audio.setSource("tidalEmergence", synth, { gain: teGain });
+                }
+              }}
+            >
+              Erosion Mode
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                !teUseErosion
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-transparent text-foreground border-foreground/30"
+              }`}
+              onClick={() => {
+                setTeUseErosion(false);
+                if (isTidalEmergencePlaying && audio.isReady) {
+                  const synth = createTidalEmergence("tidalEmergence", { ...getTidalEmergenceParams(), useErosion: false });
+                  audio.setSource("tidalEmergence", synth, { gain: teGain });
+                }
+              }}
+            >
+              Per-Voice Manual
+            </button>
+          </div>
+
+          {teUseErosion ? (
+            <SliderControl
+              label="Global Erosion"
+              value={teErosion}
+              onChange={setTeErosion}
+              onCommit={handleTidalEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <SliderControl
+                label="Voice 1 (Original)"
+                value={teVoice1Tonality}
+                onChange={setTeVoice1Tonality}
+                onCommit={handleTidalEmergenceCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+              <SliderControl
+                label="Voice 2 (Canon -5th)"
+                value={teVoice2Tonality}
+                onChange={setTeVoice2Tonality}
+                onCommit={handleTidalEmergenceCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+              <SliderControl
+                label="Voice 3 (Aug -8va)"
+                value={teVoice3Tonality}
+                onChange={setTeVoice3Tonality}
+                onCommit={handleTidalEmergenceCommit}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+          )}
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Expression</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <SliderControl
+            label="Portamento"
+            value={tePortamento}
+            onChange={setTePortamento}
+            onCommit={handleTidalEmergenceCommit}
+            min={0}
+            max={0.5}
+            step={0.01}
+            unit="s"
+          />
+          <SliderControl
+            label="Vibrato Rate"
+            value={teVibratoRate}
+            onChange={setTeVibratoRate}
+            onCommit={handleTidalEmergenceCommit}
+            min={3}
+            max={8}
+            step={0.1}
+            unit="Hz"
+          />
+          <SliderControl
+            label="Vibrato Depth"
+            value={teVibratoDepth}
+            onChange={setTeVibratoDepth}
+            onCommit={handleTidalEmergenceCommit}
+            min={0}
+            max={1}
+            step={0.01}
+            unit="st"
+          />
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Sound</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Noise Color"
+              value={teNoiseColor}
+              onChange={setTeNoiseColor}
+              onCommit={handleTidalEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Noise Q"
+              value={teNoiseQ}
+              onChange={setTeNoiseQ}
+              onCommit={handleTidalEmergenceCommit}
+              min={5}
+              max={40}
+              step={1}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Reverb Mix"
+              value={teReverbMix}
+              onChange={setTeReverbMix}
+              onCommit={handleTidalEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={teGain}
+              onChange={setTeGain}
+              onCommit={handleTidalEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+
+        <Button
+          size="lg"
+          variant={isTidalEmergencePlaying ? "default" : "outline"}
+          onClick={handleTidalEmergenceToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isTidalEmergencePlaying ? "Stop Tidal Emergence" : "Play Tidal Emergence"}
         </Button>
       </div>
 
