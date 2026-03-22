@@ -12,7 +12,26 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useAudio } from "@/hooks/use-audio";
+import {
+  createResonantTide,
+  DEFAULT_RESONANT_TIDE_PARAMS,
+  type ResonantTideParams,
+  createSineEmergence,
+  DEFAULT_SINE_EMERGENCE_PARAMS,
+  type SineEmergenceParams,
+  createKarplusTide,
+  DEFAULT_KARPLUS_TIDE_PARAMS,
+  type KarplusTideParams,
+  createCascadedResonance,
+  DEFAULT_CASCADED_RESONANCE_PARAMS,
+  type CascadedResonanceParams,
+} from "@/lib/audio/expressive-synths";
 import { createGranular, type GranularParams, type GrainEnvelope } from "@/lib/audio/granular";
+import {
+  createMelodicEmergence,
+  DEFAULT_MELODIC_EMERGENCE_PARAMS,
+  type MelodicEmergenceParams,
+} from "@/lib/audio/melodic-emergence";
 import {
   createMelodySynth,
   DEFAULT_MELODY_PARAMS,
@@ -146,6 +165,72 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
   const [filterRelease, setFilterRelease] = useState(DEFAULT_MELODY_PARAMS.filterRelease);
   const [filterQ, setFilterQ] = useState(DEFAULT_MELODY_PARAMS.filterQ);
 
+  // === Sine Emergence parameter state ===
+  const [isSineEmergencePlaying, setIsSineEmergencePlaying] = useState(false);
+  const [seTonality, setSeTonality] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.tonality);
+  const [seRootNote, setSeRootNote] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.rootNote);
+  const [seDrift, setSeDrift] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.drift);
+  const [seTideRate, setSeTideRate] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.tideRate);
+  const [seTideDepth, setSeTideDepth] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.tideDepth);
+  const [seHarmonicSpread, setSeHarmonicSpread] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.harmonicSpread);
+  const [seNoiseColor, setSeNoiseColor] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.noiseColor);
+  const [seBrightness, setSeBrightness] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.brightness);
+  const [seGain, setSeGain] = useState(DEFAULT_SINE_EMERGENCE_PARAMS.gain);
+
+  // === Karplus Tide parameter state ===
+  const [isKarplusTidePlaying, setIsKarplusTidePlaying] = useState(false);
+  const [ktRootNote, setKtRootNote] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.rootNote);
+  const [ktSustain, setKtSustain] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.sustain);
+  const [ktDamping, setKtDamping] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.damping);
+  const [ktExcitationRate, setKtExcitationRate] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.excitationRate);
+  const [ktDrift, setKtDrift] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.drift);
+  const [ktHarmonicSpread, setKtHarmonicSpread] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.harmonicSpread);
+  const [ktTideRate, setKtTideRate] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.tideRate);
+  const [ktTideDepth, setKtTideDepth] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.tideDepth);
+  const [ktGain, setKtGain] = useState(DEFAULT_KARPLUS_TIDE_PARAMS.gain);
+
+  // === Cascaded Resonance parameter state ===
+  const [isCascadedResPlaying, setIsCascadedResPlaying] = useState(false);
+  const [crRootNote, setCrRootNote] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.rootNote);
+  const [crResonanceDepth, setCrResonanceDepth] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.resonanceDepth);
+  const [crQ, setCrQ] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.q);
+  const [crDrift, setCrDrift] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.drift);
+  const [crTideRate, setCrTideRate] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.tideRate);
+  const [crTideDepth, setCrTideDepth] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.tideDepth);
+  const [crHarmonicSpread, setCrHarmonicSpread] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.harmonicSpread);
+  const [crNoiseColor, setCrNoiseColor] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.noiseColor);
+  const [crGain, setCrGain] = useState(DEFAULT_CASCADED_RESONANCE_PARAMS.gain);
+
+  // === Melodic Emergence parameter state ===
+  const [isMelodicEmergencePlaying, setIsMelodicEmergencePlaying] = useState(false);
+  const [meTonalityFloor, setMeTonalityFloor] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.tonalityFloor);
+  const [meTonalityCeil, setMeTonalityCeil] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.tonalityCeil);
+  const [meTonalityAttack, setMeTonalityAttack] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.tonalityAttack);
+  const [meTonalityRelease, setMeTonalityRelease] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.tonalityRelease);
+  const [meAttack, setMeAttack] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.attack);
+  const [meRelease, setMeRelease] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.release);
+  const [mePortamento, setMePortamento] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.portamento);
+  const [meVibratoRate, setMeVibratoRate] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.vibratoRate);
+  const [meVibratoDepth, setMeVibratoDepth] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.vibratoDepth);
+  const [meVibratoDelay, setMeVibratoDelay] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.vibratoDelay);
+  const [meDroneLevel, setMeDroneLevel] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.droneLevel);
+  const [meDroneTonality, setMeDroneTonality] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.droneTonality);
+  const [meNoiseColor, setMeNoiseColor] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.noiseColor);
+  const [meNoiseQ, setMeNoiseQ] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.noiseQ);
+  const [meReverbMix, setMeReverbMix] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.reverbMix);
+  const [meGain, setMeGain] = useState(DEFAULT_MELODIC_EMERGENCE_PARAMS.gain);
+
+  // === Resonant Tide parameter state ===
+  const [isResonantTidePlaying, setIsResonantTidePlaying] = useState(false);
+  const [rtRootNote, setRtRootNote] = useState(DEFAULT_RESONANT_TIDE_PARAMS.rootNote);
+  const [rtClarity, setRtClarity] = useState(DEFAULT_RESONANT_TIDE_PARAMS.clarity);
+  const [rtDrift, setRtDrift] = useState(DEFAULT_RESONANT_TIDE_PARAMS.drift);
+  const [rtTideRate, setRtTideRate] = useState(DEFAULT_RESONANT_TIDE_PARAMS.tideRate);
+  const [rtTideDepth, setRtTideDepth] = useState(DEFAULT_RESONANT_TIDE_PARAMS.tideDepth);
+  const [rtHarmonicSpread, setRtHarmonicSpread] = useState(DEFAULT_RESONANT_TIDE_PARAMS.harmonicSpread);
+  const [rtNoiseColor, setRtNoiseColor] = useState(DEFAULT_RESONANT_TIDE_PARAMS.noiseColor);
+  const [rtGain, setRtGain] = useState(DEFAULT_RESONANT_TIDE_PARAMS.gain);
+
   // Resonator parameter state
   const [band1Freq, setBand1Freq] = useState(220);
   const [band1Q, setBand1Q] = useState(80);
@@ -196,6 +281,167 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
     filterRelease,
     filterQ,
   });
+
+  // === Melodic Emergence handlers ===
+  const getMelodicEmergenceParams = (): MelodicEmergenceParams => ({
+    tonalityFloor: meTonalityFloor,
+    tonalityCeil: meTonalityCeil,
+    tonalityAttack: meTonalityAttack,
+    tonalityRelease: meTonalityRelease,
+    attack: meAttack,
+    release: meRelease,
+    portamento: mePortamento,
+    vibratoRate: meVibratoRate,
+    vibratoDepth: meVibratoDepth,
+    vibratoDelay: meVibratoDelay,
+    droneLevel: meDroneLevel,
+    droneTonality: meDroneTonality,
+    noiseColor: meNoiseColor,
+    noiseQ: meNoiseQ,
+    reverbMix: meReverbMix,
+    gain: meGain,
+  });
+
+  const handleMelodicEmergenceToggle = () => {
+    if (!audio.isReady) return;
+    if (isMelodicEmergencePlaying) {
+      audio.removeSource("melodicEmergence");
+      setIsMelodicEmergencePlaying(false);
+    } else {
+      const synth = createMelodicEmergence("melodicEmergence", getMelodicEmergenceParams());
+      audio.setSource("melodicEmergence", synth, { gain: meGain });
+      setIsMelodicEmergencePlaying(true);
+    }
+  };
+
+  const handleMelodicEmergenceCommit = () => {
+    if (!isMelodicEmergencePlaying || !audio.isReady) return;
+    const synth = createMelodicEmergence("melodicEmergence", getMelodicEmergenceParams());
+    audio.setSource("melodicEmergence", synth, { gain: meGain });
+  };
+
+  // === Sine Emergence handlers ===
+  const getSineEmergenceParams = (): SineEmergenceParams => ({
+    rootNote: seRootNote,
+    tonality: seTonality,
+    drift: seDrift,
+    tideRate: seTideRate,
+    tideDepth: seTideDepth,
+    harmonicSpread: seHarmonicSpread,
+    noiseColor: seNoiseColor,
+    brightness: seBrightness,
+    gain: seGain,
+  });
+
+  const handleSineEmergenceToggle = () => {
+    if (!audio.isReady) return;
+    if (isSineEmergencePlaying) {
+      audio.removeSource("sineEmergence");
+      setIsSineEmergencePlaying(false);
+    } else {
+      const synth = createSineEmergence("sineEmergence", getSineEmergenceParams());
+      audio.setSource("sineEmergence", synth, { gain: seGain });
+      setIsSineEmergencePlaying(true);
+    }
+  };
+
+  const handleSineEmergenceCommit = () => {
+    if (!isSineEmergencePlaying || !audio.isReady) return;
+    const synth = createSineEmergence("sineEmergence", getSineEmergenceParams());
+    audio.setSource("sineEmergence", synth, { gain: seGain });
+  };
+
+  // === Karplus Tide handlers ===
+  const getKarplusTideParams = (): KarplusTideParams => ({
+    rootNote: ktRootNote,
+    sustain: ktSustain,
+    damping: ktDamping,
+    excitationRate: ktExcitationRate,
+    drift: ktDrift,
+    harmonicSpread: ktHarmonicSpread,
+    tideRate: ktTideRate,
+    tideDepth: ktTideDepth,
+    gain: ktGain,
+  });
+
+  const handleKarplusTideToggle = () => {
+    if (!audio.isReady) return;
+    if (isKarplusTidePlaying) {
+      audio.removeSource("karplusTide");
+      setIsKarplusTidePlaying(false);
+    } else {
+      const synth = createKarplusTide("karplusTide", getKarplusTideParams());
+      audio.setSource("karplusTide", synth, { gain: ktGain });
+      setIsKarplusTidePlaying(true);
+    }
+  };
+
+  const handleKarplusTideCommit = () => {
+    if (!isKarplusTidePlaying || !audio.isReady) return;
+    const synth = createKarplusTide("karplusTide", getKarplusTideParams());
+    audio.setSource("karplusTide", synth, { gain: ktGain });
+  };
+
+  // === Cascaded Resonance handlers ===
+  const getCascadedResParams = (): CascadedResonanceParams => ({
+    rootNote: crRootNote,
+    resonanceDepth: crResonanceDepth,
+    q: crQ,
+    drift: crDrift,
+    tideRate: crTideRate,
+    tideDepth: crTideDepth,
+    harmonicSpread: crHarmonicSpread,
+    noiseColor: crNoiseColor,
+    gain: crGain,
+  });
+
+  const handleCascadedResToggle = () => {
+    if (!audio.isReady) return;
+    if (isCascadedResPlaying) {
+      audio.removeSource("cascadedRes");
+      setIsCascadedResPlaying(false);
+    } else {
+      const synth = createCascadedResonance("cascadedRes", getCascadedResParams());
+      audio.setSource("cascadedRes", synth, { gain: crGain });
+      setIsCascadedResPlaying(true);
+    }
+  };
+
+  const handleCascadedResCommit = () => {
+    if (!isCascadedResPlaying || !audio.isReady) return;
+    const synth = createCascadedResonance("cascadedRes", getCascadedResParams());
+    audio.setSource("cascadedRes", synth, { gain: crGain });
+  };
+
+  // === Resonant Tide handlers ===
+  const getResonantTideParams = (): ResonantTideParams => ({
+    rootNote: rtRootNote,
+    clarity: rtClarity,
+    drift: rtDrift,
+    tideRate: rtTideRate,
+    tideDepth: rtTideDepth,
+    harmonicSpread: rtHarmonicSpread,
+    noiseColor: rtNoiseColor,
+    gain: rtGain,
+  });
+
+  const handleResonantTideToggle = () => {
+    if (!audio.isReady) return;
+    if (isResonantTidePlaying) {
+      audio.removeSource("resonantTide");
+      setIsResonantTidePlaying(false);
+    } else {
+      const synth = createResonantTide("resonantTide", getResonantTideParams());
+      audio.setSource("resonantTide", synth, { gain: rtGain });
+      setIsResonantTidePlaying(true);
+    }
+  };
+
+  const handleResonantTideCommit = () => {
+    if (!isResonantTidePlaying || !audio.isReady) return;
+    const synth = createResonantTide("resonantTide", getResonantTideParams());
+    audio.setSource("resonantTide", synth, { gain: rtGain });
+  };
 
   const handleMelodyToggle = () => {
     if (!audio.isReady) return;
@@ -504,6 +750,630 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
           className="w-full"
         >
           {isMelodyPlaying ? "Stop Melody" : "Play Melody"}
+        </Button>
+      </div>
+
+      {/* ======== MELODIC EMERGENCE ======== */}
+      <div className="w-full max-w-4xl space-y-6 border-2 border-foreground/20 rounded-lg p-6">
+        <div>
+          <h2 className="text-xl font-bold">Melodic Emergence</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Each note is born from noise, crystallizes into tone, and dissolves back. The melody plays a 24s loop with 3 phrases. Uses the Sine Emergence concept with per-note tonality envelopes, delayed vibrato, and portamento.
+          </p>
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Tonality Envelope (per note)</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Tonality Floor"
+              value={meTonalityFloor}
+              onChange={setMeTonalityFloor}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Tonality Ceil"
+              value={meTonalityCeil}
+              onChange={setMeTonalityCeil}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Tonality Attack"
+              value={meTonalityAttack}
+              onChange={setMeTonalityAttack}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0.01}
+              max={2}
+              step={0.01}
+              unit="s"
+            />
+            <SliderControl
+              label="Tonality Release"
+              value={meTonalityRelease}
+              onChange={setMeTonalityRelease}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0.01}
+              max={2}
+              step={0.01}
+              unit="s"
+            />
+          </div>
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Envelope & Expression</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Attack"
+              value={meAttack}
+              onChange={setMeAttack}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0.01}
+              max={1}
+              step={0.01}
+              unit="s"
+            />
+            <SliderControl
+              label="Release"
+              value={meRelease}
+              onChange={setMeRelease}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0.01}
+              max={2}
+              step={0.01}
+              unit="s"
+            />
+            <SliderControl
+              label="Portamento"
+              value={mePortamento}
+              onChange={setMePortamento}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={0.5}
+              step={0.01}
+              unit="s"
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Vibrato Rate"
+              value={meVibratoRate}
+              onChange={setMeVibratoRate}
+              onCommit={handleMelodicEmergenceCommit}
+              min={3}
+              max={8}
+              step={0.1}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Vibrato Depth"
+              value={meVibratoDepth}
+              onChange={setMeVibratoDepth}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+              unit="st"
+            />
+            <SliderControl
+              label="Vibrato Delay"
+              value={meVibratoDelay}
+              onChange={setMeVibratoDelay}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+              unit="s"
+            />
+          </div>
+        </div>
+
+        <h3 className="text-sm font-medium text-muted-foreground">Drone & Sound</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Drone Level"
+              value={meDroneLevel}
+              onChange={setMeDroneLevel}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Drone Tonality"
+              value={meDroneTonality}
+              onChange={setMeDroneTonality}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Noise Color"
+              value={meNoiseColor}
+              onChange={setMeNoiseColor}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Noise Q"
+              value={meNoiseQ}
+              onChange={setMeNoiseQ}
+              onCommit={handleMelodicEmergenceCommit}
+              min={5}
+              max={40}
+              step={1}
+            />
+            <SliderControl
+              label="Reverb Mix"
+              value={meReverbMix}
+              onChange={setMeReverbMix}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={meGain}
+              onChange={setMeGain}
+              onCommit={handleMelodicEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+
+        <Button
+          size="lg"
+          variant={isMelodicEmergencePlaying ? "default" : "outline"}
+          onClick={handleMelodicEmergenceToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isMelodicEmergencePlaying ? "Stop Melodic Emergence" : "Play Melodic Emergence"}
+        </Button>
+      </div>
+
+      {/* ======== NOISE → TONE EXPLORATIONS ======== */}
+      <div className="w-full max-w-4xl">
+        <h1 className="text-2xl font-bold mb-2">Noise → Tone</h1>
+        <p className="text-muted-foreground text-sm mb-6">
+          Four approaches to the same idea: how does pitched, tonal sound emerge from noise? Each uses a fundamentally different technique.
+        </p>
+      </div>
+
+      {/* Original: Resonant Tide */}
+      <div className="w-full max-w-4xl space-y-6 border rounded-lg p-6">
+        <div>
+          <h2 className="text-lg font-semibold">Original: Resonant Tide</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Noise through single bandpass filters. Clarity controls Q (2→80). The tones hint but never fully emerge — that's the starting point.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Root Note (MIDI)"
+              value={rtRootNote}
+              onChange={setRtRootNote}
+              onCommit={handleResonantTideCommit}
+              min={36}
+              max={72}
+              step={1}
+            />
+            <SliderControl
+              label="Clarity"
+              value={rtClarity}
+              onChange={setRtClarity}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Drift"
+              value={rtDrift}
+              onChange={setRtDrift}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Tide Rate"
+              value={rtTideRate}
+              onChange={setRtTideRate}
+              onCommit={handleResonantTideCommit}
+              min={0.02}
+              max={0.5}
+              step={0.01}
+              unit="Hz"
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Tide Depth"
+              value={rtTideDepth}
+              onChange={setRtTideDepth}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Harmonic Spread"
+              value={rtHarmonicSpread}
+              onChange={setRtHarmonicSpread}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Noise Color"
+              value={rtNoiseColor}
+              onChange={setRtNoiseColor}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={rtGain}
+              onChange={setRtGain}
+              onCommit={handleResonantTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant={isResonantTidePlaying ? "default" : "outline"}
+          onClick={handleResonantTideToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isResonantTidePlaying ? "Stop Resonant Tide" : "Play Resonant Tide"}
+        </Button>
+      </div>
+
+      {/* Variation A: Sine Emergence */}
+      <div className="w-full max-w-4xl space-y-6 border rounded-lg p-6">
+        <div>
+          <h2 className="text-lg font-semibold">A. Sine Emergence</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Adds pure sine oscillators at the same frequencies. Tonality crossfades from filtered noise to clean sines — the tones ARE there, you just reveal them.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Root Note (MIDI)"
+              value={seRootNote}
+              onChange={setSeRootNote}
+              onCommit={handleSineEmergenceCommit}
+              min={36}
+              max={72}
+              step={1}
+            />
+            <SliderControl
+              label="Tonality"
+              value={seTonality}
+              onChange={setSeTonality}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Drift"
+              value={seDrift}
+              onChange={setSeDrift}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Brightness"
+              value={seBrightness}
+              onChange={setSeBrightness}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Harmonic Spread"
+              value={seHarmonicSpread}
+              onChange={setSeHarmonicSpread}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Noise Color"
+              value={seNoiseColor}
+              onChange={setSeNoiseColor}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Tide Rate"
+              value={seTideRate}
+              onChange={setSeTideRate}
+              onCommit={handleSineEmergenceCommit}
+              min={0.02}
+              max={0.5}
+              step={0.01}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Tide Depth"
+              value={seTideDepth}
+              onChange={setSeTideDepth}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={seGain}
+              onChange={setSeGain}
+              onCommit={handleSineEmergenceCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant={isSineEmergencePlaying ? "default" : "outline"}
+          onClick={handleSineEmergenceToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isSineEmergencePlaying ? "Stop Sine Emergence" : "Play Sine Emergence"}
+        </Button>
+      </div>
+
+      {/* Variation B: Karplus Tide */}
+      <div className="w-full max-w-4xl space-y-6 border rounded-lg p-6">
+        <div>
+          <h2 className="text-lg font-semibold">B. Karplus Tide</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Physical string modeling: noise bursts excite delay-line "strings." Sustain controls feedback — at low values, noise; at high values, clear ringing tones that sustain.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Root Note (MIDI)"
+              value={ktRootNote}
+              onChange={setKtRootNote}
+              onCommit={handleKarplusTideCommit}
+              min={36}
+              max={72}
+              step={1}
+            />
+            <SliderControl
+              label="Sustain"
+              value={ktSustain}
+              onChange={setKtSustain}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Damping"
+              value={ktDamping}
+              onChange={setKtDamping}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Excitation Rate"
+              value={ktExcitationRate}
+              onChange={setKtExcitationRate}
+              onCommit={handleKarplusTideCommit}
+              min={0.1}
+              max={5}
+              step={0.1}
+              unit="Hz"
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Drift"
+              value={ktDrift}
+              onChange={setKtDrift}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Harmonic Spread"
+              value={ktHarmonicSpread}
+              onChange={setKtHarmonicSpread}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Tide Rate"
+              value={ktTideRate}
+              onChange={setKtTideRate}
+              onCommit={handleKarplusTideCommit}
+              min={0.02}
+              max={0.5}
+              step={0.01}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Tide Depth"
+              value={ktTideDepth}
+              onChange={setKtTideDepth}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={ktGain}
+              onChange={setKtGain}
+              onCommit={handleKarplusTideCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant={isKarplusTidePlaying ? "default" : "outline"}
+          onClick={handleKarplusTideToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isKarplusTidePlaying ? "Stop Karplus Tide" : "Play Karplus Tide"}
+        </Button>
+      </div>
+
+      {/* Variation C: Cascaded Resonance */}
+      <div className="w-full max-w-4xl space-y-6 border rounded-lg p-6">
+        <div>
+          <h2 className="text-lg font-semibold">C. Cascaded Resonance</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Stacks 1→4 bandpass filters in series. Each pass narrows the bandwidth further. The tone genuinely emerges from the noise — no added oscillators.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            <SliderControl
+              label="Root Note (MIDI)"
+              value={crRootNote}
+              onChange={setCrRootNote}
+              onCommit={handleCascadedResCommit}
+              min={36}
+              max={72}
+              step={1}
+            />
+            <SliderControl
+              label="Resonance Depth"
+              value={crResonanceDepth}
+              onChange={setCrResonanceDepth}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Q (per pass)"
+              value={crQ}
+              onChange={setCrQ}
+              onCommit={handleCascadedResCommit}
+              min={5}
+              max={60}
+              step={1}
+            />
+            <SliderControl
+              label="Drift"
+              value={crDrift}
+              onChange={setCrDrift}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+          <div className="space-y-4">
+            <SliderControl
+              label="Harmonic Spread"
+              value={crHarmonicSpread}
+              onChange={setCrHarmonicSpread}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Noise Color"
+              value={crNoiseColor}
+              onChange={setCrNoiseColor}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Tide Rate"
+              value={crTideRate}
+              onChange={setCrTideRate}
+              onCommit={handleCascadedResCommit}
+              min={0.02}
+              max={0.5}
+              step={0.01}
+              unit="Hz"
+            />
+            <SliderControl
+              label="Tide Depth"
+              value={crTideDepth}
+              onChange={setCrTideDepth}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+            <SliderControl
+              label="Gain"
+              value={crGain}
+              onChange={setCrGain}
+              onCommit={handleCascadedResCommit}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant={isCascadedResPlaying ? "default" : "outline"}
+          onClick={handleCascadedResToggle}
+          disabled={!audio.isReady}
+          className="w-full"
+        >
+          {isCascadedResPlaying ? "Stop Cascaded Resonance" : "Play Cascaded Resonance"}
         </Button>
       </div>
 
