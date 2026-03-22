@@ -812,7 +812,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
         <div>
           <h2 className="text-xl font-bold">Tidal Emergence</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Three voices exist simultaneously inside shared noise. As erosion increases, voices progressively resolve from the noise bed — first the original melody, then a canon at the 5th below, then an augmented bass line an octave below. The noise IS the unresolved sum of all voices.
+            Three register voices from circular-melody1.mid exist inside shared noise. As erosion increases, voices progressively resolve — first the high melody (F#4–C#5), then the middle voice (A3–E4), then the bass (C#3–G#3). The noise IS the unresolved sum of all voices. ~225s loop.
           </p>
         </div>
 
@@ -868,7 +868,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <SliderControl
-                label="Voice 1 (Original)"
+                label="Voice 1 (High melody)"
                 value={teVoice1Tonality}
                 onChange={setTeVoice1Tonality}
                 onCommit={handleTidalEmergenceCommit}
@@ -877,7 +877,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
                 step={0.01}
               />
               <SliderControl
-                label="Voice 2 (Canon -5th)"
+                label="Voice 2 (Mid voice)"
                 value={teVoice2Tonality}
                 onChange={setTeVoice2Tonality}
                 onCommit={handleTidalEmergenceCommit}
@@ -886,7 +886,7 @@ function AudioPlayground({ samplesLoaded }: { samplesLoaded: boolean }) {
                 step={0.01}
               />
               <SliderControl
-                label="Voice 3 (Aug -8va)"
+                label="Voice 3 (Bass)"
                 value={teVoice3Tonality}
                 onChange={setTeVoice3Tonality}
                 onCommit={handleTidalEmergenceCommit}
