@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TIDAL_EMERGENCE_LOOP_DURATION } from "@/lib/audio/tidal-emergence";
 
 export type TimelineState = "stopped" | "playing" | "paused";
 
-const DURATION = 236; // seconds — 3m56s, matches camera path + melody delay
+// Aligned with the Tidal Emergence MIDI loop (~225s) so the timeline slider
+// covers exactly one pass of the piece.
+const DURATION = TIDAL_EMERGENCE_LOOP_DURATION;
 
 export interface Timeline {
   /** Current time in seconds */

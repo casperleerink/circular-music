@@ -1,192 +1,152 @@
-import { el } from "@elemaudio/core";
+import type { NodeRepr_t } from "@elemaudio/core";
 import { useCallback, useEffect, useRef } from "react";
-import { useAudio } from "@/hooks/use-audio";
-import { createResonator } from "@/lib/audio/resonator";
+import { useAudio, type AudioRef } from "@/hooks/use-audio";
 import {
-  getResonatorParamsAtTime,
-  getNextChangeTime,
-} from "@/lib/audio/resonator-melody";
+  createTidalEmergence,
+  DEFAULT_TIDAL_EMERGENCE_PARAMS,
+  TIDAL_EMERGENCE_LOOP_DURATION,
+  TIDAL_EMERGENCE_TICK_RATE,
+} from "@/lib/audio/tidal-emergence";
 import type { TimelineState } from "@/hooks/use-timeline";
 
-const SAMPLE_FILE = "acadia_waves.mp3";
-const SAMPLE_PATH = "/samples/acadia";
-const MELODY_FILE = "circular-music-melody.mp3";
-const MELODY_PATH = "/samples/melody";
-const MELODY_DELAY = 5; // seconds — melody starts after this delay
-const SAMPLE_RATE = 44100;
+const SOURCE_ID = "tidalEmergence";
+const PARAMS = DEFAULT_TIDAL_EMERGENCE_PARAMS;
 
-// Store sample metadata outside component
-let sampleLength: number | null = null;
-let melodyLength: number | null = null;
+type SynthSignal = { left: NodeRepr_t; right: NodeRepr_t };
 
 /**
- * Calculate the startOffset (in samples) for a looping sample at a given time.
- */
-function loopOffset(elapsed: number, lengthInSamples: number): number {
-  const durationSec = lengthInSamples / SAMPLE_RATE;
-  return Math.floor((elapsed % durationSec) * SAMPLE_RATE);
-}
-
-/**
- * Hook that manages resonator audio for the shoreline scene.
- * Accepts timeline refs to sync audio with transport controls.
+ * Drives Tidal Emergence for the shoreline scene.
+ *
+ * Transport:
+ *   play   -> setSource attaches the synth
+ *   pause  -> removeSource silences (position held in timeRef)
+ *   stop   -> removeSource + timeRef reset drives tickTime to 0
+ *   seek   -> tickTime ref jumps; sparseq2 looks up the new tick
+ *
+ * `tickTime` / `erosion` use `core.createRef` so seek and the (future)
+ * location-driven erosion never rebuild the audio graph.
+ *
+ * Implementation note: the transport RAF loop runs via a *stable* useEffect
+ * (empty deps). We avoid tying the effect's lifecycle to the `audio` context
+ * object — that changes identity when `isReady` flips, which would otherwise
+ * re-run cleanup and detach the synth mid-playback.
  */
 export function useShorelineAudio(
   timeRef: React.RefObject<number>,
   stateRef: React.RefObject<TimelineState>,
 ) {
   const audio = useAudio();
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
+
   const startedRef = useRef(false);
   const rafRef = useRef<number>(0);
-  const nextChangeRef = useRef<number>(0);
+  const synthMountedRef = useRef(false);
+  const tickSetterRef = useRef<AudioRef[1] | null>(null);
+  const erosionSetterRef = useRef<AudioRef[1] | null>(null);
+  const synthRef = useRef<SynthSignal | null>(null);
   const prevStateRef = useRef<TimelineState>("stopped");
-  const melodyStartedRef = useRef(false);
-  const prevElapsedRef = useRef(0);
-  const seekCountRef = useRef(0);
 
-  const renderAtTime = useCallback(
-    (elapsed: number) => {
-      if (!sampleLength) return;
+  const attachSynth = useCallback(() => {
+    if (!synthRef.current) return;
+    audioRef.current.setSource(SOURCE_ID, synthRef.current, {
+      gain: PARAMS.gain,
+    });
+    synthMountedRef.current = true;
+  }, []);
 
-      const params = getResonatorParamsAtTime(elapsed);
-      const sk = seekCountRef.current;
-
-      // Use el.sample in loop mode with startOffset so scrubbing repositions audio
-      const offset = loopOffset(elapsed, sampleLength);
-      const sampleSignal = el.sample(
-        { path: SAMPLE_PATH, mode: "loop" as const, startOffset: offset, key: `sample-${sk}` },
-        1, 1,
-      );
-
-      const resonated = createResonator("resonator", params, {
-        left: sampleSignal,
-        right: sampleSignal,
-      });
-
-      audio.setSource("resonator", resonated, { gain: 0.5 });
-
-      // Render melody if loaded and past delay
-      if (melodyLength && elapsed >= MELODY_DELAY) {
-        const melodyElapsed = elapsed - MELODY_DELAY;
-        const melodyOffset = loopOffset(melodyElapsed, melodyLength);
-        const melodySignal = el.sample(
-          { path: MELODY_PATH, mode: "loop" as const, startOffset: melodyOffset, key: `melody-${sk}` },
-          1, 1,
-        );
-        audio.setSource("melody", {
-          left: melodySignal,
-          right: melodySignal,
-        }, { gain: 0.5 });
-      } else if (melodyLength && elapsed < MELODY_DELAY) {
-        audio.removeSource("melody");
-      }
-    },
-    [audio],
-  );
-
-  const updateResonator = useCallback(() => {
-    if (!sampleLength) return;
-
-    const currentState = stateRef.current;
-    const elapsed = timeRef.current;
-
-    // Handle state transitions
-    if (currentState !== prevStateRef.current) {
-      if (currentState === "stopped" || currentState === "paused") {
-        // Mute on stop/pause
-        audio.removeSource("resonator");
-        audio.removeSource("melody");
-        prevStateRef.current = currentState;
-        if (currentState === "stopped") {
-          nextChangeRef.current = 0;
-          melodyStartedRef.current = false;
-          seekCountRef.current++;
-        }
-        rafRef.current = requestAnimationFrame(updateResonator);
-        return;
-      }
-      if (currentState === "playing") {
-        // Re-render on resume — reset seek tracking to avoid false detection
-        nextChangeRef.current = 0;
-        prevElapsedRef.current = elapsed;
-      }
-      prevStateRef.current = currentState;
-    }
-
-    if (currentState !== "playing") {
-      rafRef.current = requestAnimationFrame(updateResonator);
-      return;
-    }
-
-    // Detect seek: time jumped backwards or forward by more than expected
-    const timeDelta = elapsed - prevElapsedRef.current;
-    prevElapsedRef.current = elapsed;
-    const isSeek = timeDelta < -0.05 || timeDelta > 0.2;
-    if (isSeek) {
-      seekCountRef.current++;
-      nextChangeRef.current = 0; // force re-render
-    }
-
-    // Force re-render when melody delay is crossed
-    const melodyReady = elapsed >= MELODY_DELAY;
-    const melodyJustStarted = melodyReady && !melodyStartedRef.current;
-    melodyStartedRef.current = melodyReady;
-
-    // Only re-render when a band changes pitch, melody just started, or user seeked
-    if (elapsed < nextChangeRef.current && !melodyJustStarted && !isSeek) {
-      rafRef.current = requestAnimationFrame(updateResonator);
-      return;
-    }
-    nextChangeRef.current = getNextChangeTime(elapsed);
-
-    renderAtTime(elapsed);
-
-    rafRef.current = requestAnimationFrame(updateResonator);
-  }, [audio, timeRef, stateRef, renderAtTime]);
+  const detachSynth = useCallback(() => {
+    audioRef.current.removeSource(SOURCE_ID);
+    synthMountedRef.current = false;
+  }, []);
 
   const initialize = useCallback(async () => {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    const ctx = await audio.initialize();
+    const ctx = await audioRef.current.initialize();
     if (!ctx) return;
 
-    // Load acadia sample
-    const response = await fetch(`/audio/${SAMPLE_FILE}`);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    const channelData = audioBuffer.getChannelData(0);
+    if (ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch (err) {
+        console.error("[shoreline-audio] ctx.resume failed", err);
+      }
+    }
 
-    sampleLength = channelData.length;
-    audio.updateVirtualFileSystem({ [SAMPLE_PATH]: channelData });
+    const [tickNode, setTick] = audioRef.current.createRef("const", {
+      value: 0,
+    });
+    const [erosionNode, setErosion] = audioRef.current.createRef("const", {
+      value: PARAMS.erosion,
+    });
 
-    // Load melody sample
-    const melodyResponse = await fetch(`/audio/${MELODY_FILE}`);
-    const melodyArrayBuffer = await melodyResponse.arrayBuffer();
-    const melodyAudioBuffer = await ctx.decodeAudioData(melodyArrayBuffer);
-    const melodyChannelData = melodyAudioBuffer.getChannelData(0);
+    tickSetterRef.current = setTick;
+    erosionSetterRef.current = setErosion;
 
-    melodyLength = melodyChannelData.length;
-    audio.updateVirtualFileSystem({ [MELODY_PATH]: melodyChannelData });
+    synthRef.current = createTidalEmergence(SOURCE_ID, PARAMS, {
+      tickTime: tickNode,
+      erosion: erosionNode,
+    });
 
-    // Initial render
-    renderAtTime(0);
+    attachSynth();
+  }, [attachSynth]);
 
-    // Start update loop
-    nextChangeRef.current = getNextChangeTime(0);
-    rafRef.current = requestAnimationFrame(updateResonator);
-  }, [audio, renderAtTime, updateResonator]);
+  const setErosion = useCallback((value: number) => {
+    try {
+      erosionSetterRef.current?.({ value });
+    } catch (err) {
+      console.error("[shoreline-audio] erosion setter failed", err);
+    }
+  }, []);
 
-  // Cleanup on unmount
+  // Stable RAF loop — mount once, cleanup on unmount only.
   useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (startedRef.current) {
-        audio.removeSource("resonator");
-        audio.removeSource("melody");
+    const loop = () => {
+      rafRef.current = requestAnimationFrame(loop);
+
+      const state = stateRef.current;
+      const prev = prevStateRef.current;
+
+      if (state !== prev) {
+        if (state === "playing" && !synthMountedRef.current) {
+          attachSynth();
+        } else if (
+          (state === "paused" || state === "stopped") &&
+          synthMountedRef.current
+        ) {
+          detachSynth();
+        }
+        prevStateRef.current = state;
+      }
+
+      if (synthMountedRef.current) {
+        const tick =
+          (timeRef.current % TIDAL_EMERGENCE_LOOP_DURATION) *
+          TIDAL_EMERGENCE_TICK_RATE;
+        try {
+          tickSetterRef.current?.({ value: tick });
+        } catch (err) {
+          console.error("[shoreline-audio] tick setter failed", err);
+        }
       }
     };
-  }, [audio]);
 
-  return { initialize };
+    rafRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      if (synthMountedRef.current) {
+        audioRef.current.removeSource(SOURCE_ID);
+        synthMountedRef.current = false;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { initialize, setErosion };
 }

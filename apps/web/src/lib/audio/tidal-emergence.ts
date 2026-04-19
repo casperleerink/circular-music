@@ -25,9 +25,13 @@ import type { NodeRepr_t } from "@elemaudio/core";
 
 // --- MIDI timing ---
 // 96 TPQ at 120 BPM = 192 ticks/second
-const TICK_RATE = 192;
-const TOTAL_TICKS = 43200; // ~225 seconds, covers full MIDI range
-const LOOP_DURATION = TOTAL_TICKS / TICK_RATE;
+export const TIDAL_EMERGENCE_TICK_RATE = 192;
+export const TIDAL_EMERGENCE_TOTAL_TICKS = 43200; // ~225 seconds, covers full MIDI range
+export const TIDAL_EMERGENCE_LOOP_DURATION =
+  TIDAL_EMERGENCE_TOTAL_TICKS / TIDAL_EMERGENCE_TICK_RATE;
+
+const TICK_RATE = TIDAL_EMERGENCE_TICK_RATE;
+const TOTAL_TICKS = TIDAL_EMERGENCE_TOTAL_TICKS;
 
 interface MidiNote {
   note: number;
@@ -138,37 +142,37 @@ function midiToFreq(note: number): number {
 
 function buildFreqSeq(
   notes: MidiNote[],
-): Array<{ value: number; tickTime: number }> {
+): Array<{ value: number; time: number }> {
   // Set a default frequency at tick 0 if no note starts there
   const seq = notes.map((n) => ({
     value: midiToFreq(n.note),
-    tickTime: n.startTick,
+    time: n.startTick,
   }));
 
-  if (!seq.some((s) => s.tickTime === 0)) {
+  if (!seq.some((s) => s.time === 0)) {
     // Use the first note's frequency as a reasonable default
-    seq.push({ value: midiToFreq(notes[0].note), tickTime: 0 });
+    seq.push({ value: midiToFreq(notes[0].note), time: 0 });
   }
 
-  return seq.sort((a, b) => a.tickTime - b.tickTime);
+  return seq.sort((a, b) => a.time - b.time);
 }
 
 function buildGateSeq(
   notes: MidiNote[],
-): Array<{ value: number; tickTime: number }> {
-  const seq: Array<{ value: number; tickTime: number }> = [];
+): Array<{ value: number; time: number }> {
+  const seq: Array<{ value: number; time: number }> = [];
 
   for (const n of notes) {
-    seq.push({ value: 1, tickTime: n.startTick });
-    seq.push({ value: 0, tickTime: n.endTick });
+    seq.push({ value: 1, time: n.startTick });
+    seq.push({ value: 0, time: n.endTick });
   }
 
   // Ensure silence at tick 0 if no note starts there
-  if (!seq.some((s) => s.tickTime === 0)) {
-    seq.push({ value: 0, tickTime: 0 });
+  if (!seq.some((s) => s.time === 0)) {
+    seq.push({ value: 0, time: 0 });
   }
 
-  return seq.sort((a, b) => a.tickTime - b.tickTime);
+  return seq.sort((a, b) => a.time - b.time);
 }
 
 // Pre-build all sequences
@@ -252,9 +256,25 @@ function erosionToVoiceTonality(
   return el.max(0, el.min(1, scaled));
 }
 
+/**
+ * Optional signal inputs for externally driving the synth.
+ *
+ * - `tickTime`: current position in MIDI ticks [0, TOTAL_TICKS). If omitted,
+ *   the synth self-drives via `el.time()` — useful for fire-and-forget
+ *   playback like the testing page.
+ * - `erosion`: signal in [0, 1] — overrides `params.erosion`. Provide this
+ *   (e.g. via `core.createRef`) to animate erosion without rebuilding the
+ *   graph.
+ */
+export interface TidalEmergenceInputs {
+  tickTime?: NodeRepr_t;
+  erosion?: NodeRepr_t;
+}
+
 export function createTidalEmergence(
   key: string,
   params: TidalEmergenceParams,
+  inputs: TidalEmergenceInputs = {},
 ): { left: NodeRepr_t; right: NodeRepr_t } {
   const {
     erosion,
@@ -270,6 +290,16 @@ export function createTidalEmergence(
     reverbMix,
     gain,
   } = params;
+
+  // =============================================
+  // TIME DRIVER — external signal or self-running phasor
+  // =============================================
+  const tickTime =
+    inputs.tickTime ??
+    el.mod(
+      el.mul(TICK_RATE, el.div(el.time(), el.sr())),
+      TOTAL_TICKS,
+    );
 
   // =============================================
   // SHARED NOISE — all voices filter from the same source
@@ -293,11 +323,11 @@ export function createTidalEmergence(
 
   const bpQ = el.const({ key: `${key}:noiseQ`, value: noiseQ });
 
-  // Global erosion signal
-  const smoothErosion = el.smooth(
-    el.tau2pole(0.5),
-    el.const({ key: `${key}:erosion`, value: erosion }),
-  );
+  // Global erosion signal — prefer external input, else params-derived const
+  const erosionSource =
+    inputs.erosion ??
+    el.const({ key: `${key}:erosion`, value: erosion });
+  const smoothErosion = el.smooth(el.tau2pole(0.5), erosionSource);
 
   // Per-voice tonality values (manual overrides)
   const manualTonalities = [voice1Tonality, voice2Tonality, voice3Tonality];
@@ -311,20 +341,15 @@ export function createTidalEmergence(
   for (let v = 0; v < 3; v++) {
     const vKey = `${key}:v${v}`;
 
-    // --- Sequencer ---
-    const clock = el.train(TICK_RATE);
-    const loopTrigger = el.train(1 / LOOP_DURATION);
-
-    const seqFreq = el.sparseq(
+    // --- Sequencer: time-driven via external tickTime ---
+    const seqFreq = el.sparseq2(
       { key: `${vKey}:freq`, seq: VOICE_FREQ_SEQS[v] },
-      clock,
-      loopTrigger,
+      tickTime,
     );
 
-    const gate = el.sparseq(
+    const gate = el.sparseq2(
       { key: `${vKey}:gate`, seq: VOICE_GATE_SEQS[v] },
-      clock,
-      loopTrigger,
+      tickTime,
     );
 
     // --- Portamento ---

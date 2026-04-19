@@ -19,6 +19,8 @@ type SourceEntry = {
   gain: number;
 };
 
+export type AudioRef = [NodeRepr_t, (props: Record<string, unknown>) => void];
+
 interface AudioContextValue {
   isReady: boolean;
   initialize: () => Promise<AudioContext | undefined>;
@@ -30,6 +32,11 @@ interface AudioContextValue {
   removeSource: (id: string) => void;
   silence: () => void;
   updateVirtualFileSystem: (entries: Record<string, Float32Array>) => void;
+  createRef: (
+    kind: string,
+    props: Record<string, unknown>,
+    children?: NodeRepr_t[],
+  ) => AudioRef;
   ctx: AudioContext | null;
   core: WebRenderer | null;
 }
@@ -133,6 +140,16 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const createRef = useCallback<AudioContextValue["createRef"]>(
+    (kind, props, children = []) => {
+      if (!coreRef.current) {
+        throw new Error("AudioProvider not initialized");
+      }
+      return coreRef.current.createRef(kind, props, children) as AudioRef;
+    },
+    []
+  );
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -153,10 +170,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       removeSource,
       silence,
       updateVirtualFileSystem,
+      createRef,
       ctx: ctxRef.current,
       core: coreRef.current,
     }),
-    [isReady, initialize, setSource, removeSource, silence, updateVirtualFileSystem]
+    [isReady, initialize, setSource, removeSource, silence, updateVirtualFileSystem, createRef]
   );
 
   return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
